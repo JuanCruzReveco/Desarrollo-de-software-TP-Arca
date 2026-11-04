@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="api-base-url" content="http://localhost:8080/api">
+  <title>Facturación · CRUD</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>Sistema de Facturación</h1>
+    <span class="topbar__api">API: <code>http://localhost:8080/api</code></span>
+  </header>
+
+  <main class="layout">
+    <p id="mensaje" class="mensaje" role="status" aria-live="polite" aria-atomic="true"></p>
+
+    <!-- ================= 1. Búsqueda con filtros ================= -->
+    <section class="card">
+      <h2>Buscar comprobantes</h2>
+      <form id="form-filtros" class="grid grid--4">
+        <label>Desde <input type="date" name="fechaDesde"></label>
+        <label>Hasta <input type="date" name="fechaHasta"></label>
+        <label>Estado
+          <select name="estado">
+            <option value="">Todos</option>
+            <option value="BORRADOR">Borrador</option>
+            <option value="EMITIDA">Emitida</option>
+            <option value="ANULADA">Anulada</option>
+          </select>
+        </label>
+        <label>Monto mínimo <input type="number" name="montoMinimo" min="0" step="0.01" placeholder="0,00"></label>
+        <div class="acciones acciones--span">
+          <button type="submit" class="btn btn--primary">Buscar</button>
+          <button type="button" id="btn-limpiar-filtros" class="btn">Limpiar</button>
+          <span class="spacer"></span>
+          <a id="link-pdf" class="btn" href="#" target="_blank" rel="noopener">Reporte PDF</a>
+          <a id="link-xlsx" class="btn" href="#" target="_blank" rel="noopener">Reporte Excel</a>
+        </div>
+      </form>
+    </section>
+
+    <!-- ================= 2. Alta de factura ================= -->
+    <section class="card">
+      <h2 id="titulo-alta">Nueva factura</h2>
+      <form id="form-factura">
+        <input type="hidden" name="facturaId" value="">
+        <div class="grid grid--4">
+          <label>Punto de venta <select name="puntoVentaId" required></select></label>
+          <label>Cliente <select name="clienteId"><option value="">Consumidor Final</option></select></label>
+          <label>Condición IVA <select name="condicionIvaId" required></select></label>
+          <label>Moneda <select name="tipoMonedaId" required></select></label>
+          <label>Fecha de emisión <input type="date" name="fechaEmision"></label>
+          <label class="span-3">Observaciones <input type="text" name="observaciones" maxlength="500"></label>
+        </div>
+
+        <h3>Renglones</h3>
+        <div class="grid grid--item">
+          <label>Artículo (lista de precios) <select id="item-articulo"></select></label>
+          <label>Cantidad <input type="number" id="item-cantidad" min="0.01" step="0.01" value="1"></label>
+          <label>Bonif. % <input type="number" id="item-bonif" min="0" max="100" step="0.5" value="0"></label>
+          <label>Descripción (opcional) <input type="text" id="item-descripcion" maxlength="255"></label>
+          <button type="button" id="btn-agregar-item" class="btn">Agregar ítem</button>
+        </div>
+
+        <table class="tabla" id="tabla-items">
+          <thead>
+            <tr>
+              <th>Artículo</th><th class="num">Cantidad</th><th class="num">Precio unit.</th>
+              <th class="num">Bonif. %</th><th class="num">Subtotal estimado</th><th></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+          <tfoot>
+            <tr><td colspan="4" class="num">Total estimado (sin IVA)</td><td class="num" id="total-items">$ 0,00</td><td></td></tr>
+          </tfoot>
+        </table>
+
+        <div class="acciones">
+          <button type="submit" class="btn btn--primary" id="btn-guardar">Guardar factura</button>
+          <button type="button" class="btn" id="btn-cancelar-edicion" hidden>Cancelar edición</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- ================= 3. Listado de comprobantes ================= -->
+    <section class="card">
+      <h2>Comprobantes <small id="contador"></small></h2>
+      <table class="tabla" id="tabla-facturas">
+        <thead>
+          <tr>
+            <th class="num">N°</th><th>Fecha</th><th>Cliente</th><th>Cond. IVA</th><th>Punto de venta</th>
+            <th class="num">Ítems</th><th class="num">Total</th><th>Estado</th><th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <p id="sin-resultados" class="vacio" hidden>No hay comprobantes para los filtros seleccionados.</p>
+    </section>
+  </main>
+
+  <script type="module" src="dist/app.js"></script>
+</body>
+</html>

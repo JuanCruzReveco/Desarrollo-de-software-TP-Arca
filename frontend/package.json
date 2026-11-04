@@ -1,0 +1,19 @@
+{
+  "name": "facturacion-frontend",
+  "version": "1.0.0",
+  "description": "Frontend CRUD de facturación en HTML5 + TypeScript (sin frameworks)",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "serve": "http-server . -p 5173 -c-1 -o",
+    "dev": "npm run build && npm run serve",
+    "test": "npm run build && node --experimental-vm-modules test/app.test.mjs"
+  },
+  "devDependencies": {
+    "http-server": "^14.1.1",
+    "jsdom": "26.1.0",
+    "typescript": "^5.6.3"
+  }
+}

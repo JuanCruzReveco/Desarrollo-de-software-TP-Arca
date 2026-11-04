@@ -1,0 +1,10 @@
+build/
+.gradle/
+*.log
+.idea/
+*.iml
+.vscode/
+out/
+frontend/node_modules/
+frontend/dist/
+data/

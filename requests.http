@@ -1,0 +1,90 @@
+### Archivo de pruebas para el REST Client de IntelliJ / VS Code.
+### Levantar la app (./gradlew bootRun) y ejecutar cada request con "Send Request".
+
+@host = http://localhost:8080
+@usuario = acortez
+
+### 1. Listar todas las facturas (reporte)
+GET {{host}}/api/facturas
+Accept: application/json
+
+### 2. Listar con filtros opcionales
+GET {{host}}/api/facturas?fechaDesde=2026-03-01&fechaHasta=2026-04-30&estado=EMITIDA&montoMinimo=50000
+Accept: application/json
+
+### 3. Obtener una factura con sus renglones
+GET {{host}}/api/facturas/2
+Accept: application/json
+
+### 4. Catálogos para armar el request
+GET {{host}}/api/catalogos/lista-precio-articulos
+
+### 5. Crear una factura (queda en BORRADOR) -> 201 Created + header Location
+POST {{host}}/api/facturas
+Content-Type: application/json
+X-Usuario: {{usuario}}
+
+{
+  "clienteId": 1,
+  "condicionIvaId": 1,
+  "puntoVentaId": 1,
+  "tipoMonedaId": 1,
+  "observaciones": "Creada desde requests.http",
+  "detalles": [
+    { "listaPrecioArticuloId": 1, "cantidad": 1, "porcentajeBonificacion": 10 },
+    { "listaPrecioArticuloId": 2, "cantidad": 3, "descripcion": "Mouse para el laboratorio" }
+  ]
+}
+
+### 6. Request inválido -> 400 con detalle de errores por campo
+POST {{host}}/api/facturas
+Content-Type: application/json
+
+{ "clienteId": 1, "detalles": [] }
+
+### 7. Actualizar cabecera e ítems de un BORRADOR -> 200 OK  (cambiar el id por el creado en 5)
+PUT {{host}}/api/facturas/7
+Content-Type: application/json
+X-Usuario: {{usuario}}
+
+{
+  "clienteId": null,
+  "condicionIvaId": 2,
+  "puntoVentaId": 2,
+  "tipoMonedaId": 1,
+  "detalles": [
+    { "listaPrecioArticuloId": 4, "cantidad": 5 }
+  ]
+}
+
+### 8. Emitir (asigna número correlativo y CAE simulado) -> 200 OK
+PATCH {{host}}/api/facturas/7/estado
+Content-Type: application/json
+X-Usuario: {{usuario}}
+
+{ "estado": "EMITIDA" }
+
+### 9. Intentar borrar una factura EMITIDA -> 409 Conflict (regla de negocio)
+DELETE {{host}}/api/facturas/7
+
+### 10. Anular -> 200 OK
+PATCH {{host}}/api/facturas/7/estado
+Content-Type: application/json
+X-Usuario: {{usuario}}
+
+{ "estado": "ANULADA", "observaciones": "Cliente desistió de la compra" }
+
+### 11. Borrar un BORRADOR -> 204 No Content (id 5 es un borrador de los datos de ejemplo)
+DELETE {{host}}/api/facturas/5
+
+### 12. Factura inexistente -> 404 Not Found
+GET {{host}}/api/facturas/9999
+
+### 13. Reporte PDF (abrir en el navegador: http://localhost:8080/api/facturas/reporte?formato=pdf)
+GET {{host}}/api/facturas/reporte?formato=pdf
+
+### 14. Reporte Excel con filtros
+GET {{host}}/api/facturas/reporte?formato=xlsx&estado=EMITIDA
+
+### 15. Reporte texto tabulado
+GET {{host}}/api/facturas/reporte?formato=txt

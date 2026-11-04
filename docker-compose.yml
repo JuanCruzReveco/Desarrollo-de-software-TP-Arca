@@ -1,0 +1,17 @@
+# Base de datos PostgreSQL para el perfil "postgres"
+#   docker compose up -d
+#   ./gradlew bootRun --args='--spring.profiles.active=postgres'
+services:
+  db:
+    image: postgres:16
+    container_name: facturacion-db
+    environment:
+      POSTGRES_DB: facturacion
+      POSTGRES_USER: facturacion
+      POSTGRES_PASSWORD: facturacion
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+volumes:
+  pgdata:

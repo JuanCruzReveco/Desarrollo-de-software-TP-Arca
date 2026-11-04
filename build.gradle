@@ -1,0 +1,54 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.3.5'
+    id 'io.spring.dependency-management' version '1.1.6'
+}
+
+group = 'ar.edu.utn.frm'
+version = '1.0.0'
+description = 'TP Integrador - Sistema de Facturación (JPA, Lombok, DTOs, REST)'
+
+java {
+    // Spring Boot 3 requiere Java 17 como mínimo. Compila con cualquier JDK >= 17 (17 o 21).
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+configurations {
+    compileOnly {
+        extendsFrom annotationProcessor
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // --- Etapa 1: persistencia JPA / Hibernate (jakarta.persistence) ---
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+
+    // --- Etapa 3: servicios web REST + validación de DTOs ---
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+
+    // --- Etapa 2: Lombok ---
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+
+    // --- Etapa 2: reportes PDF y Excel ---
+    implementation 'com.github.librepdf:openpdf:2.0.3'
+    implementation 'org.apache.poi:poi-ooxml:5.3.0'
+
+    // --- Bases de datos: H2 (dev, por defecto) y PostgreSQL (perfil "postgres") ---
+    runtimeOnly 'com.h2database:h2'
+    runtimeOnly 'org.postgresql:postgresql'
+
+    // --- Tests ---
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}

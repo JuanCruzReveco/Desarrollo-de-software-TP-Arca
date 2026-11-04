@@ -1,0 +1,59 @@
+# ==========================================================
+# Configuración por defecto: H2 en memoria (arranca sin instalar nada)
+# Consola H2: http://localhost:8080/h2-console  (JDBC URL: jdbc:h2:mem:facturacion)
+# ==========================================================
+spring:
+  application:
+    name: facturacion-arca
+  datasource:
+    url: jdbc:h2:mem:facturacion;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+  jpa:
+    hibernate:
+      ddl-auto: update          # equivalente a hibernate.hbm2ddl.auto = update del TP 1
+    show-sql: true              # hibernate.show_sql = true
+    properties:
+      hibernate:
+        format_sql: true        # hibernate.format_sql = true
+    open-in-view: false         # buena práctica: las transacciones terminan en el @Service
+  h2:
+    console:
+      enabled: true
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false   # LocalDate -> "2026-03-15"
+
+facturacion:
+  # Orígenes permitidos para el frontend (proyecto separado)
+  cors:
+    allowed-origins: "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:3000"
+  # Alícuota de IVA por defecto cuando el artículo no define una
+  iva-por-defecto: 21.0
+  # Usuario con el que se auditan las operaciones cuando el cliente no envía el header X-Usuario
+  usuario-por-defecto: sistema
+
+server:
+  port: 8080
+
+---
+# ==========================================================
+# Perfil "postgres": ./gradlew bootRun --args='--spring.profiles.active=postgres'
+# ==========================================================
+spring:
+  config:
+    activate:
+      on-profile: postgres
+  datasource:
+    url: jdbc:postgresql://localhost:5432/facturacion
+    driver-class-name: org.postgresql.Driver
+    username: facturacion
+    password: facturacion
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+  h2:
+    console:
+      enabled: false

@@ -375,6 +375,8 @@ npm test
 
 Los informes de cada etapa ([etapa-1](docs/etapa-1.md) a [etapa-5](docs/etapa-5.md)) registran qué se ejecutó, en qué entorno y con qué resultado. Los documentos que acompañaban al kit ([VERIFICACION.md](docs/kit-catedra/VERIFICACION.md), [AUDITORIA-2026-10-30.md](docs/kit-catedra/AUDITORIA-2026-10-30.md), [backend](docs/kit-catedra/BACKEND-FIXES.md), [frontend](docs/kit-catedra/FRONTEND-FIXES.md) y [reportes](docs/kit-catedra/REPORT-FIXES.md)) son evidencias del autor del kit, fechadas el 30/10/2026: no sustituyen ejecutar las pruebas después de cambiar el código.
 
+La tabla [docs/correspondencia-consignas.md](docs/correspondencia-consignas.md) indica en qué archivo se cumple cada consigna del TP «CRUD Factura Venta» del Campus (DTO de entrada, servicio transaccional, endpoints, interfaces TypeScript, `FacturaService.ts`, `index.html` y `app.ts`), y enlaza los informes del integrador.
+
 ## Origen del código y declaración de uso
 
 **Origen.** El código fuente de backend y frontend, la configuración, `requests.http` y las pruebas heredadas provienen del kit de nivelación de la cátedra (`arca-spirng-main`). Se incorporó completo en el primer commit del repositorio (tag `kit-catedra`), sin modificaciones de código.

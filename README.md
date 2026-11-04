@@ -1,8 +1,10 @@
 # Sistema de Facturación ARCA
 
-Proyecto académico de facturación con backend Java/Spring Boot, frontend HTML/CSS/TypeScript y material de trabajo práctico y evaluación. Permite crear y editar borradores, emitir y anular facturas, consultar por filtros y exportar reportes.
+Trabajo práctico integrador **individual** de Desarrollo de Software (UTN FRM, 2026): sistema de facturación con backend Java/Spring Boot y frontend HTML/CSS/TypeScript. Permite crear y editar borradores, emitir y anular facturas, consultar por filtros y exportar reportes.
 
-El backend y el frontend se ejecutan por separado. La evaluación interactiva es autónoma y no necesita ninguno de esos servicios. El **CAE es simulado**: no se consultan servicios fiscales de ARCA. El encabezado **`X-Usuario` identifica auditoría, sin autenticar** a quien realiza la solicitud.
+> **Declaración de origen y uso de herramientas.** El código de este repositorio proviene del **kit de nivelación publicado por la cátedra** (`arca-spirng-main`), incorporado completo en el commit inicial. Para esta entrega se lo estudió, se lo ejecutó y se lo verificó (resultados en [docs/](docs/)); las modificaciones propias se limitan a la reorganización del repositorio, este README y los informes. Se utilizó un asistente de IA (Claude, de Anthropic) para armar el repositorio, ejecutar las comprobaciones y redactar borradores de los informes; los resultados citados son los de ejecuciones reales y están registrados en cada `docs/etapa-N.md`. Los commits hechos con asistencia llevan la línea `Co-Authored-By`. Ver [Origen del código y declaración de uso](#origen-del-código-y-declaración-de-uso).
+
+El backend y el frontend se ejecutan por separado. El **CAE es simulado**: no se consultan servicios fiscales de ARCA. El encabezado **`X-Usuario` identifica auditoría, sin autenticar** a quien realiza la solicitud.
 
 ## Contenido
 
@@ -14,7 +16,7 @@ El backend y el frontend se ejecutan por separado. La evaluación interactiva es
 - [API y reglas de negocio](#api-y-reglas-de-negocio)
 - [Reportes](#reportes)
 - [Pruebas y verificación](#pruebas-y-verificación)
-- [Trabajo práctico y evaluación](#trabajo-práctico-y-evaluación)
+- [Origen del código y declaración de uso](#origen-del-código-y-declaración-de-uso)
 - [Problemas frecuentes y límites](#problemas-frecuentes-y-límites)
 
 ## Estructura del proyecto
@@ -59,29 +61,16 @@ facturacion-arca/
 │   │   ├── models/factura.dto.ts        # Tipos del contrato HTTP
 │   │   └── services/FacturaService.ts   # Cliente fetch y errores de la API
 │   └── test/app.test.mjs                # Regresiones de interfaz y cliente HTTP
-├── evaluacion/
-│   ├── README.md                       # Uso, importación Moodle y verificación
-│   ├── preguntas-base.json             # Casos 1–20
-│   ├── preguntas-avanzadas.json         # Casos 21–40
-│   ├── app.mjs / styles.css            # Lógica y estilo del cuestionario
-│   ├── build.mjs                       # Generador de entregables
-│   ├── evaluacion-arca.html             # Cuestionario autónomo generado
-│   ├── banco-arca-moodle.xml            # Banco Cloze generado
-│   ├── clave-docente.md                 # Clave y fundamentos generados
-│   ├── test/                           # Pruebas y parser de referencia Moodle
-│   └── AUDITORIA-*.md                   # Informes del cuestionario
-├── documentos/tp-arca/
-│   ├── TP Integrador Sistema de Facturacion ARCA actualizado.docx
-│   └── trabajo/                        # Borradores, scripts, respaldos y revisión visual
 ├── scripts/Verify-Postgres.ps1          # Verificación en una base temporal aislada
-├── VERIFICACION.md                     # Procedimientos y evidencia de pruebas previas
-├── AUDITORIA-2026-10-30.md              # Auditoría de la aplicación
-├── BACKEND-FIXES.md
-├── FRONTEND-FIXES.md
-└── REPORT-FIXES.md
+└── docs/
+    ├── etapa-1.md … etapa-5.md          # Informes de cada entrega (decisiones, dificultades, evidencia)
+    └── kit-catedra/                     # Documentos que acompañaban al kit, sin modificar
+        ├── VERIFICACION.md
+        ├── AUDITORIA-2026-10-30.md
+        └── BACKEND-FIXES.md / FRONTEND-FIXES.md / REPORT-FIXES.md
 ```
 
-`build/` contiene los resultados de Gradle; `.gradle/`, su caché local. `frontend/dist/` contiene JavaScript compilado y `frontend/node_modules/`, dependencias npm. Estas rutas están excluidas en `.gitignore`. `.idea/` corresponde al IDE y `tmp/` contiene archivos auxiliares; no forman parte del código de la aplicación. También existe una copia del Word en la raíz: la referencia documental utilizada aquí es la versión de `documentos/tp-arca/`.
+`build/` contiene los resultados de Gradle; `.gradle/`, su caché local. `frontend/dist/` contiene JavaScript compilado y `frontend/node_modules/`, dependencias npm. Estas rutas están excluidas en `.gitignore`. Los documentos de `docs/kit-catedra/` se conservan tal como llegaron con el kit: las rutas `tmp/` y `build/test-results/` que mencionan (capturas y resultados de las verificaciones del autor del kit) **no forman parte de este repositorio**.
 
 ## Arquitectura y modelo
 
@@ -367,7 +356,7 @@ En Linux/macOS:
 ./gradlew test
 ```
 
-Las pruebas de `src/test/java/ar/edu/utn/frm/facturacion/` cubren servicios y HTTP, validación, auditoría, concurrencia, cálculo y precisión monetaria, y contenido de PDF/XLSX/TXT. `DatosDePrueba` construye los fixtures. El perfil `test` usa H2 con `ddl-auto=create-drop`; el informe se genera en `build/reports/tests/test/index.html`.
+Las pruebas de `src/test/java/ar/edu/utn/frm/facturacion/` (76 en total: 62 del kit y 14 propias de `PersistenciaModeloTest`) cubren persistencia y restricciones, servicios y HTTP, validación, auditoría, concurrencia, cálculo y precisión monetaria, y contenido de PDF/XLSX/TXT. `DatosDePrueba` construye los fixtures. El perfil `test` usa H2 con `ddl-auto=create-drop`; el informe se genera en `build/reports/tests/test/index.html`.
 
 `scripts/Verify-Postgres.ps1` ejecuta la suite contra un contenedor temporal identificado por su ID completo y comprueba su identidad antes de continuar. Espera `facturacion-arca-verificacion`, imagen `postgres:16`, puerto `127.0.0.1:55432` y base `facturacion_verificacion`. No crea el contenedor y utiliza `--offline`, por lo que necesita dependencias descargadas. La suite `create-drop` no debe apuntar a una base cuyos datos se deban conservar.
 
@@ -382,37 +371,26 @@ npm test
 
 `npm test` compila TypeScript y ejecuta `test/app.test.mjs` con jsdom y módulos VM. Prueba DOM y cliente HTTP simulado; no equivale a una sesión completa en un navegador real. `npm run build` comprueba solo la compilación.
 
-### Evaluación
+### Evidencia de verificación
 
-Desde la raíz, con las dependencias del frontend instaladas:
+Los informes de cada etapa ([etapa-1](docs/etapa-1.md) a [etapa-5](docs/etapa-5.md)) registran qué se ejecutó, en qué entorno y con qué resultado. Los documentos que acompañaban al kit ([VERIFICACION.md](docs/kit-catedra/VERIFICACION.md), [AUDITORIA-2026-10-30.md](docs/kit-catedra/AUDITORIA-2026-10-30.md), [backend](docs/kit-catedra/BACKEND-FIXES.md), [frontend](docs/kit-catedra/FRONTEND-FIXES.md) y [reportes](docs/kit-catedra/REPORT-FIXES.md)) son evidencias del autor del kit, fechadas el 30/10/2026: no sustituyen ejecutar las pruebas después de cambiar el código.
 
-```text
-node evaluacion/test/app.test.mjs
-node evaluacion/test/build.test.mjs
-node evaluacion/test/artifact.test.mjs
-```
+## Origen del código y declaración de uso
 
-Los procedimientos y resultados anteriores están en [VERIFICACION.md](VERIFICACION.md), [AUDITORIA-2026-10-30.md](AUDITORIA-2026-10-30.md) y [evaluacion/README.md](evaluacion/README.md). Son evidencias fechadas; no sustituyen ejecutar pruebas después de cambiar el código. Las correcciones se detallan en [backend](BACKEND-FIXES.md), [frontend](FRONTEND-FIXES.md) y [reportes](REPORT-FIXES.md).
+**Origen.** El código fuente de backend y frontend, la configuración, `requests.http` y las pruebas heredadas provienen del kit de nivelación de la cátedra (`arca-spirng-main`). Se incorporó completo en el primer commit del repositorio (tag `kit-catedra`), sin modificaciones de código.
 
-## Trabajo práctico y evaluación
+**Qué se hizo sobre el kit en esta entrega.**
 
-El [trabajo práctico actualizado](documentos/tp-arca/TP%20Integrador%20Sistema%20de%20Facturacion%20ARCA%20actualizado.docx) es **individual** y utiliza la denominación **Universidad Nacional Tecnologica**. Las consignas reflejan la implementación. `documentos/tp-arca/trabajo/` reúne fuentes de autoría, respaldos y revisión visual; no es una dependencia de la aplicación.
+- Reorganización del repositorio: se excluyeron artefactos de compilación, dependencias, archivos temporales y una página de QA que apuntaba a otro puerto; los documentos del kit pasaron a `docs/kit-catedra/`.
+- Este README, adaptado (se retiró lo que describía material que no se incluye) y con esta declaración.
+- Pruebas propias de persistencia, `PersistenciaModeloTest` (14 pruebas): el kit no probaba restricciones de unicidad y nulidad con datos que las violen, ni que eliminar un borrador conserve los catálogos, ni la clave foránea del detalle. Se comprobó, rompiendo a propósito el código de producción, que estas pruebas fallan cuando el mapeo es incorrecto (detalle en [docs/etapa-1.md](docs/etapa-1.md)).
+- Los informes `docs/etapa-N.md` y la verificación de las cinco etapas.
 
-El banco contiene 40 casos y 160 respuestas:
+**Uso de IA.** Se utilizó un asistente de IA (Claude, de Anthropic) para: armar el repositorio, ejecutar las comprobaciones, escribir las pruebas propias descritas arriba y redactar los borradores de los informes. Cada resultado citado en los informes proviene de una ejecución real. El código heredado y las pruebas propias deben ser comprendidos y explicables por el estudiante en la defensa; los commits hechos con asistencia llevan la línea `Co-Authored-By`.
 
-- [evaluacion-arca.html](evaluacion/evaluacion-arca.html): práctica autónoma con corrección y guardado local cuando el navegador lo permite; se abre directamente sin backend.
-- [banco-arca-moodle.xml](evaluacion/banco-arca-moodle.xml): preguntas Cloze para importar en Moodle.
-- [clave-docente.md](evaluacion/clave-docente.md): soluciones, fundamentos y referencias.
+**Alcance de la verificación.** Las pruebas se ejecutaron con **H2**. PostgreSQL 16 no se probó en este equipo (no hay Docker instalado); el kit documenta una ejecución propia sobre PostgreSQL, pero ese resultado no se reproduce aquí y no debe tomarse como evidencia de este repositorio. El PDF se revisa visualmente según se indica en [docs/etapa-2.md](docs/etapa-2.md).
 
-El HTML incluye soluciones y no constituye un examen protegido. Intentos, tiempos y revisión para una evaluación formal se configuran en Moodle. El procedimiento completo está en [la guía de evaluación](evaluacion/README.md).
-
-Para modificar el banco, editar los JSON y, cuando corresponda, `app.mjs` o `styles.css`. Regenerar desde la raíz y ejecutar las pruebas indicadas arriba:
-
-```text
-node evaluacion/build.mjs
-```
-
-El generador produce HTML, XML y clave docente. Los cambios manuales en esos entregables se reemplazan al reconstruirlos.
+**Enunciado.** El enunciado vigente es el publicado en el Campus Virtual (curso Desarrollo de Software, sección del TP ARCA). El documento no se incluye en el repositorio.
 
 ## Problemas frecuentes y límites
 

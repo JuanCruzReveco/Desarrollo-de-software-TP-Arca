@@ -1,0 +1,7 @@
+N°	Fecha	Cliente	Condición IVA	Punto de venta	Ítems	Total	Estado	Moneda
+3	2026-11-04	Juan Pérez	IVA Responsable Inscripto	Sucursal Central	2	105185.30	ANULADA	PES
+	2026-11-04	Empresa Tech S.A.	IVA Responsable Inscripto	Sucursal Central	1	89540.00	BORRADOR	PES
+2	2026-04-10	Juan Pérez	Responsable Monotributo	Sucursal Godoy Cruz	1	1149500.00	EMITIDA	PES
+1	2026-04-02	UTN Facultad Regional Mendoza	IVA Responsable Inscripto	Sucursal Godoy Cruz	2	272306.00	ANULADA	PES
+2	2026-03-20	Empresa Tech S.A.	IVA Responsable Inscripto	Sucursal Central	5	2424142.00	EMITIDA	PES
+1	2026-03-15	Consumidor Final	Consumidor Final	Sucursal Central	2	49005.00	EMITIDA	PES

@@ -1,0 +1,10 @@
+# Normaliza finales de linea. El wrapper de Gradle para Unix debe conservar LF.
+* text=auto
+gradlew text eol=lf
+*.bat text eol=crlf
+*.jar binary
+*.otf binary
+*.jpg binary
+*.png binary
+*.pdf binary
+*.xlsx binary

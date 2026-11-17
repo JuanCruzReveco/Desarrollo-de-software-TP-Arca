@@ -27,6 +27,7 @@ const estado = {
   articulos: [] as OpcionDTO[],
   monedas: [] as OpcionDTO[],
   guardando: false,
+  accionesPendientes: new Set<number>(),
   busqueda: 0,
   edicion: 0,
 };
@@ -328,7 +329,7 @@ function renderFacturas(): void {
       boton.className = `btn btn--sm ${clase}`;
       boton.dataset.accion = accion;
       boton.dataset.id = String(f.id);
-      boton.disabled = !habilitada || estado.guardando;
+      boton.disabled = !habilitada || estado.guardando || estado.accionesPendientes.has(f.id);
       boton.textContent = etiqueta;
       acciones.append(boton);
     }
@@ -337,9 +338,14 @@ function renderFacturas(): void {
 }
 
 async function accionFila(accion: string, id: number): Promise<void> {
-  if (estado.guardando) return;
+  if (estado.guardando || estado.accionesPendientes.has(id)) return;
   const factura = estado.facturas.find((f) => f.id === id);
   if (!factura) return;
+  const mutacion = accion === 'emitir' || accion === 'anular' || accion === 'eliminar';
+  if (mutacion) {
+    estado.accionesPendientes.add(id);
+    renderFacturas();
+  }
   try {
     switch (accion) {
       case 'emitir': {
@@ -367,6 +373,11 @@ async function accionFila(accion: string, id: number): Promise<void> {
     await buscar();
   } catch (err) {
     manejarError(err);
+  } finally {
+    if (mutacion) {
+      estado.accionesPendientes.delete(id);
+      renderFacturas();
+    }
   }
 }
 

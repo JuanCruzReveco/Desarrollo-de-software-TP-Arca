@@ -8,7 +8,7 @@ const invoice = { id: 1, numeroFactura: 10, fechaEmision: '2026-10-29', clienteD
 const createdInvoice = { ...invoice, numeroFactura: null, estado: 'BORRADOR' };
 const tick = () => new Promise(resolve => setImmediate(resolve));
 
-async function open(t, { invoices = [], article = 'Artículo', post, get, prompt = null, apiBase } = {}) {
+async function open(t, { invoices = [], article = 'Artículo', post, patch, get, prompt = null, apiBase } = {}) {
   let html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
   if (apiBase) html = html.replace(/<meta name="api-base-url"[^>]*>/, '').replace('</head>', `<meta name="api-base-url" content="${apiBase}"></head>`);
   const dom = new JSDOM(html, { url: 'http://localhost:5173', runScripts: 'outside-only' });
@@ -20,6 +20,7 @@ async function open(t, { invoices = [], article = 'Artículo', post, get, prompt
     requests.push({ url, ...init });
     let body;
     if (init.method === 'POST') return post ? post() : { ok: true, status: 201, json: async () => createdInvoice };
+    if (init.method === 'PATCH' && patch) return patch();
     if (init.method === 'PATCH') body = { ...invoice, estado: 'ANULADA' };
     else if (url.includes('/catalogos/')) {
       body = url.endsWith('/tipos-moneda')
@@ -289,4 +290,45 @@ test('API origin can be configured without changing compiled JavaScript', async 
 test('configured API base normalizes trailing slash', async t => {
   const ui = await open(t, { apiBase: 'https://facturas.example/api/' });
   assert.equal(ui.requests[0].url, 'https://facturas.example/api/catalogos/puntos-venta');
+});
+
+test('unfinished next item does not invalidate an invoice with saved rows', async t => {
+  const ui = await open(t);
+  ui.click('#btn-agregar-item');
+  const quantity = ui.document.querySelector('#item-cantidad');
+  quantity.value = '0';
+  assert.equal(quantity.checkValidity(), false);
+  assert.equal(ui.document.querySelector('#form-factura').checkValidity(), true);
+});
+
+test('invalid pending discount stays in item editor without blocking invoice save', async t => {
+  const ui = await open(t);
+  ui.click('#btn-agregar-item');
+  const discount = ui.document.querySelector('#item-bonif');
+  discount.value = '101';
+  assert.equal(discount.checkValidity(), false);
+  assert.equal(ui.document.querySelector('#form-factura').checkValidity(), true);
+  ui.submit();
+  await tick();
+  assert.equal(ui.requests.filter(r => r.method === 'POST').length, 1);
+});
+
+test('double clicking Emitir sends only one PATCH while the first is pending', async t => {
+  const pending = deferred();
+  const ui = await open(t, { invoices: [createdInvoice], patch: () => pending.promise });
+  ui.click('[data-accion="emitir"]');
+  ui.click('[data-accion="emitir"]');
+  assert.equal(ui.requests.filter(r => r.method === 'PATCH').length, 1);
+  pending.resolve(response(invoice));
+  await tick();
+});
+
+test('double clicking Anular sends only one PATCH while the first is pending', async t => {
+  const pending = deferred();
+  const ui = await open(t, { invoices: [invoice], prompt: '', patch: () => pending.promise });
+  ui.click('[data-accion="anular"]');
+  ui.click('[data-accion="anular"]');
+  assert.equal(ui.requests.filter(r => r.method === 'PATCH').length, 1);
+  pending.resolve(response({ ...invoice, estado: 'ANULADA' }));
+  await tick();
 });

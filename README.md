@@ -2,7 +2,7 @@
 
 Trabajo práctico integrador **individual** de Desarrollo de Software (UTN FRM, 2026): sistema de facturación con backend Java/Spring Boot y frontend HTML/CSS/TypeScript. Permite crear y editar borradores, emitir y anular facturas, consultar por filtros y exportar reportes.
 
-> **Declaración de origen y uso de herramientas.** El código de este repositorio proviene del **kit de nivelación publicado por la cátedra** (`arca-spirng-main`), incorporado completo en el commit inicial. Para esta entrega se lo estudió, se lo ejecutó y se lo verificó (resultados en [docs/](docs/)); las modificaciones propias se limitan a la reorganización del repositorio, este README y los informes. Se utilizó un asistente de IA (Claude, de Anthropic) para armar el repositorio, ejecutar las comprobaciones y redactar borradores de los informes; los resultados citados son los de ejecuciones reales y están registrados en cada `docs/etapa-N.md`. Los commits hechos con asistencia llevan la línea `Co-Authored-By`. Ver [Origen del código y declaración de uso](#origen-del-código-y-declaración-de-uso).
+> **Declaración de origen y uso de herramientas.** La base de este repositorio proviene del **kit de nivelación publicado por la cátedra** (`arca-spirng-main`), incorporado completo en el commit inicial. Sobre esa base se agregaron pruebas de persistencia y se corrigieron dos problemas de interacción del frontend; los cambios se detallan [más abajo](#origen-del-código-y-declaración-de-uso). Se utilizaron asistentes de IA (Claude y Codex) para preparar, revisar y verificar la entrega. Los resultados citados en los informes corresponden a ejecuciones reales; cada informe distingue la evidencia propia de la heredada del kit.
 
 El backend y el frontend se ejecutan por separado. El **CAE es simulado**: no se consultan servicios fiscales de ARCA. El encabezado **`X-Usuario` identifica auditoría, sin autenticar** a quien realiza la solicitud.
 
@@ -379,16 +379,17 @@ La tabla [docs/correspondencia-consignas.md](docs/correspondencia-consignas.md) 
 
 ## Origen del código y declaración de uso
 
-**Origen.** El código fuente de backend y frontend, la configuración, `requests.http` y las pruebas heredadas provienen del kit de nivelación de la cátedra (`arca-spirng-main`). Se incorporó completo en el primer commit del repositorio (tag `kit-catedra`), sin modificaciones de código.
+**Origen.** El código fuente inicial de backend y frontend, la configuración, `requests.http` y las pruebas heredadas provienen del kit de nivelación de la cátedra (`arca-spirng-main`). Se incorporó completo en el primer commit del repositorio (tag `kit-catedra`). Los cambios posteriores se detallan a continuación.
 
 **Qué se hizo sobre el kit en esta entrega.**
 
 - Reorganización del repositorio: se excluyeron artefactos de compilación, dependencias, archivos temporales y una página de QA que apuntaba a otro puerto; los documentos del kit pasaron a `docs/kit-catedra/`.
 - Este README, adaptado (se retiró lo que describía material que no se incluye) y con esta declaración.
 - Pruebas propias de persistencia, `PersistenciaModeloTest` (14 pruebas): el kit no probaba restricciones de unicidad y nulidad con datos que las violen, ni que eliminar un borrador conserve los catálogos, ni la clave foránea del detalle. Se comprobó, rompiendo a propósito el código de producción, que estas pruebas fallan cuando el mapeo es incorrecto (detalle en [docs/etapa-1.md](docs/etapa-1.md)).
+- Correcciones del frontend: los campos del próximo renglón se asociaron a un formulario separado para que un renglón incompleto no invalide el guardado de una factura que ya tiene detalles; las acciones de emitir, anular y eliminar se bloquean por factura mientras esperan respuesta para evitar peticiones duplicadas. Se agregaron cuatro pruebas de regresión en `frontend/test/app.test.mjs`.
 - Los informes `docs/etapa-N.md` y la verificación de las cinco etapas.
 
-**Uso de IA.** Se utilizó un asistente de IA (Claude, de Anthropic) para: armar el repositorio, ejecutar las comprobaciones, escribir las pruebas propias descritas arriba y redactar los borradores de los informes. Cada resultado citado en los informes proviene de una ejecución real. El código heredado y las pruebas propias deben ser comprendidos y explicables por el estudiante en la defensa; los commits hechos con asistencia llevan la línea `Co-Authored-By`.
+**Uso de IA.** Se utilizó Claude (Anthropic) para armar el repositorio, ejecutar comprobaciones, escribir las pruebas propias de persistencia y redactar borradores de los informes. Se utilizó Codex (OpenAI) para revisar la entrega, corregir los dos problemas del frontend, agregar sus pruebas de regresión y actualizar la documentación. Los cambios y resultados se revisaron mediante el diff y las pruebas: **76/76** del backend en H2 y **34/34** del frontend con jsdom. El código heredado y los cambios propios deben ser comprendidos y explicables por el estudiante en la defensa. Los commits anteriores hechos con asistencia de Claude llevan la línea `Co-Authored-By`.
 
 **Alcance de la verificación.** Las pruebas se ejecutaron con **H2**. PostgreSQL 16 no se probó en este equipo (no hay Docker instalado); el kit documenta una ejecución propia sobre PostgreSQL, pero ese resultado no se reproduce aquí y no debe tomarse como evidencia de este repositorio. El PDF se revisa visualmente según se indica en [docs/etapa-2.md](docs/etapa-2.md).
 

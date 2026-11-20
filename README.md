@@ -371,7 +371,7 @@ npm ci
 npm test
 ```
 
-`npm test` compila TypeScript y ejecuta `test/app.test.mjs` con jsdom y módulos VM. La suite actual pasó **46/46** pruebas, incluidas las de exploradores, selección de lista, fechas y acción Imprimir. Prueba DOM y cliente HTTP simulado; no equivale a una sesión completa en un navegador real. `npm run build` comprueba solo la compilación.
+`npm test` compila TypeScript y ejecuta `test/app.test.mjs` con jsdom y módulos VM. La suite actual pasó **47/47** pruebas, incluidas las de exploradores, selección de lista, fechas y acción Imprimir. Prueba DOM y cliente HTTP simulado; no equivale a una sesión completa en un navegador real. `npm run build` comprueba solo la compilación.
 
 ### Evidencia de verificación
 

@@ -8,14 +8,14 @@ const invoice = { id: 1, numeroFactura: 10, fechaEmision: '2026-10-29', clienteD
 const createdInvoice = { ...invoice, numeroFactura: null, estado: 'BORRADOR' };
 const tick = () => new Promise(resolve => setImmediate(resolve));
 
-async function open(t, { invoices = [], article = 'Artículo', catalogs = {}, post, patch, get, prompt = null, apiBase, selectArticle = true } = {}) {
+async function open(t, { invoices = [], article = 'Artículo', catalogs = {}, post, patch, get, apiBase, selectArticle = true } = {}) {
   let html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
   if (apiBase) html = html.replace(/<meta name="api-base-url"[^>]*>/, '').replace('</head>', `<meta name="api-base-url" content="${apiBase}"></head>`);
   const dom = new JSDOM(html, { url: 'http://localhost:5173', runScripts: 'outside-only' });
   t.after(() => dom.window.close());
   const requests = [];
   const openedUrls = [];
-  dom.window.prompt = () => prompt;
+  dom.window.prompt = () => { throw new Error('prompt() is not supported'); };
   dom.window.open = (...args) => { openedUrls.push(args); return null; };
   dom.window.HTMLElement.prototype.scrollIntoView = () => {};
   dom.window.fetch = async (url, init = {}) => {
@@ -207,18 +207,31 @@ test('API customer and catalog text cannot insert HTML nodes', async t => {
 });
 
 test('canceling annulment leaves invoice unchanged without a PATCH', async t => {
-  const ui = await open(t, { invoices: [invoice], prompt: null });
+  const ui = await open(t, { invoices: [invoice] });
   ui.click('[data-accion="anular"]');
+  assert.equal(ui.document.querySelector('#dialogo-anulacion').open, true);
+  ui.click('#cancelar-anulacion');
   await tick();
   assert.equal(ui.requests.filter(r => r.method === 'PATCH').length, 0);
 });
 
 test('accepting an empty annulment reason still annuls', async t => {
-  const ui = await open(t, { invoices: [invoice], prompt: '' });
+  const ui = await open(t, { invoices: [invoice] });
   ui.click('[data-accion="anular"]');
+  ui.click('#confirmar-anulacion');
   await tick();
   const patch = ui.requests.find(r => r.method === 'PATCH');
   assert.deepEqual(JSON.parse(patch.body), { estado: 'ANULADA' });
+});
+
+test('annulment dialog sends a typed reason without using browser prompt', async t => {
+  const ui = await open(t, { invoices: [invoice] });
+  ui.click('[data-accion="anular"]');
+  ui.document.querySelector('#motivo-anulacion').value = '  Error de carga  ';
+  ui.click('#confirmar-anulacion');
+  await tick();
+  const patch = ui.requests.find(r => r.method === 'PATCH');
+  assert.deepEqual(JSON.parse(patch.body), { estado: 'ANULADA', observaciones: 'Error de carga' });
 });
 
 test('repeated submit while saving produces only one invoice request', async t => {
@@ -337,8 +350,10 @@ test('double clicking Emitir sends only one PATCH while the first is pending', a
 
 test('double clicking Anular sends only one PATCH while the first is pending', async t => {
   const pending = deferred();
-  const ui = await open(t, { invoices: [invoice], prompt: '', patch: () => pending.promise });
+  const ui = await open(t, { invoices: [invoice], patch: () => pending.promise });
   ui.click('[data-accion="anular"]');
+  ui.click('#confirmar-anulacion');
+  await tick();
   ui.click('[data-accion="anular"]');
   assert.equal(ui.requests.filter(r => r.method === 'PATCH').length, 1);
   pending.resolve(response({ ...invoice, estado: 'ANULADA' }));

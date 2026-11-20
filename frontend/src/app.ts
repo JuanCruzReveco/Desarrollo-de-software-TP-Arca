@@ -511,6 +511,31 @@ function renderFacturas(): void {
   }
 }
 
+function pedirMotivoAnulacion(): Promise<string | null> {
+  const dialogo = $<HTMLDialogElement>('#dialogo-anulacion');
+  const campo = $<HTMLInputElement>('#motivo-anulacion');
+  const confirmar = $<HTMLButtonElement>('#confirmar-anulacion');
+  const cancelar = $<HTMLButtonElement>('#cancelar-anulacion');
+  campo.value = '';
+  return new Promise(resolve => {
+    const finalizar = (motivo: string | null) => {
+      confirmar.removeEventListener('click', aceptar);
+      cancelar.removeEventListener('click', descartar);
+      dialogo.removeEventListener('cancel', escapar);
+      if (typeof dialogo.close === 'function') dialogo.close();
+      else dialogo.removeAttribute('open');
+      resolve(motivo);
+    };
+    const aceptar = () => finalizar(campo.value.trim());
+    const descartar = () => finalizar(null);
+    const escapar = (ev: Event) => { ev.preventDefault(); finalizar(null); };
+    confirmar.addEventListener('click', aceptar);
+    cancelar.addEventListener('click', descartar);
+    dialogo.addEventListener('cancel', escapar);
+    abrirDialogo(dialogo, campo);
+  });
+}
+
 async function accionFila(accion: string, id: number): Promise<void> {
   if (estado.guardando || estado.accionesPendientes.has(id)) return;
   const factura = estado.facturas.find((f) => f.id === id);
@@ -531,7 +556,7 @@ async function accionFila(accion: string, id: number): Promise<void> {
         break;
       }
       case 'anular': {
-        const motivo = window.prompt('Motivo de la anulación (opcional):');
+        const motivo = await pedirMotivoAnulacion();
         if (motivo === null) return;
         await api.actualizarEstado(id, 'ANULADA', motivo || undefined);
         mostrarMensaje(`Factura N° ${factura.numeroFactura} anulada`, 'ok');

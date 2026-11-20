@@ -267,9 +267,13 @@ function leerFiltros(): FacturaFiltrosDTO {
   const form = $<HTMLFormElement>('#form-filtros');
   const data = new FormData(form);
   const monto = data.get('montoMinimo') as string;
+  const fechaHasta = fechaIso(data.get('fechaHasta') as string, 'Hasta');
+  if (fechaHasta && fechaHasta > fechaIso(fechaHoyVisible(), 'Hoy')!) {
+    throw new Error('Hasta: la fecha no puede ser posterior a hoy');
+  }
   return {
     fechaDesde: fechaIso(data.get('fechaDesde') as string, 'Desde'),
-    fechaHasta: fechaIso(data.get('fechaHasta') as string, 'Hasta'),
+    fechaHasta,
     estado: (data.get('estado') as EstadoFactura | '') || undefined,
     montoMinimo: monto ? Number(monto) : undefined,
   };
@@ -680,6 +684,7 @@ function conectarEventos(): void {
 
 async function iniciar(): Promise<void> {
   $<HTMLElement>('.topbar__api code').textContent = apiBaseUrl.replace(/\/+$/, '');
+  $<HTMLElement>('#fecha-hasta-maximo').textContent = `Máximo: ${fechaHoyVisible()}`;
   conectarEventos();
   renderItems();
   try {

@@ -483,11 +483,11 @@ test('invoice and filter dates display day first while API receives ISO dates', 
   assert.equal(date.type, 'text');
   assert.match(date.value, /^\d{2}\/\d{2}\/\d{4}$/);
   date.value = '09/11/2026';
-  ui.document.querySelector('[name="fechaDesde"]').value = '01/11/2026';
-  ui.document.querySelector('[name="fechaHasta"]').value = '30/11/2026';
+  ui.document.querySelector('[name="fechaDesde"]').value = '01/11/2020';
+  ui.document.querySelector('[name="fechaHasta"]').value = '30/11/2020';
   ui.document.querySelector('#form-filtros').dispatchEvent(new ui.document.defaultView.Event('submit', { cancelable: true }));
   await tick();
-  assert.ok(ui.requests.some(r => r.url.includes('fechaDesde=2026-11-01') && r.url.includes('fechaHasta=2026-11-30')));
+  assert.ok(ui.requests.some(r => r.url.includes('fechaDesde=2020-11-01') && r.url.includes('fechaHasta=2020-11-30')));
   ui.click('#btn-agregar-item'); ui.submit(); await tick();
   assert.equal(JSON.parse(ui.requests.find(r => r.method === 'POST').body).fechaEmision, '2026-11-09');
 });
@@ -525,6 +525,25 @@ test('backspace can remove an automatic date separator', async t => {
   field.value = '3';
   field.dispatchEvent(new ui.document.defaultView.InputEvent('input', { bubbles: true, inputType: 'deleteContentBackward' }));
   assert.equal(field.value, '3');
+});
+
+test('Hasta rejects a future date but accepts today', async t => {
+  const ui = await open(t);
+  const today = new Date();
+  const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+  const visible = date => `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`;
+  const iso = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  const until = ui.document.querySelector('[name="fechaHasta"]');
+  const count = ui.requests.filter(r => r.url.includes('/facturas') && !r.method).length;
+  until.value = visible(tomorrow);
+  ui.document.querySelector('#form-filtros').dispatchEvent(new ui.document.defaultView.Event('submit', { cancelable: true }));
+  await tick();
+  assert.equal(ui.requests.filter(r => r.url.includes('/facturas') && !r.method).length, count);
+  assert.match(ui.document.querySelector('#mensaje').textContent, /hoy/i);
+  until.value = visible(today);
+  ui.document.querySelector('#form-filtros').dispatchEvent(new ui.document.defaultView.Event('submit', { cancelable: true }));
+  await tick();
+  assert.ok(ui.requests.some(r => r.url.includes(`fechaHasta=${iso(today)}`)));
 });
 
 test('impossible day-first dates are rejected before sending invoice or filters', async t => {

@@ -30,7 +30,7 @@ El PDF individual y el reporte de facturas son recursos distintos: `/api/factura
 ## Validación ejecutada
 
 - Backend: `gradlew test` con perfil de pruebas H2: **87/87 pruebas aprobadas**, 18 suites, sin fallos. Las pruebas nuevas cubren el PDF con datos de factura, fecha día primero, CAE/vencimiento, varias páginas y reglas HTTP, además del catálogo de listas y del filtro de artículos.
-- Frontend: `npm test`: **50/50 pruebas aprobadas** con TypeScript y jsdom. Se añadieron casos de fechas, exploradores, paginación, selección de lista y acción Imprimir.
+- Frontend: `npm test`: **51/51 pruebas aprobadas** con TypeScript y jsdom. Se añadieron casos de fechas, exploradores, paginación, selección de lista y acción Imprimir.
 - Se generaron muestras en [factura-demo.pdf](muestras/factura-demo.pdf) y [factura-demo-multipagina.pdf](muestras/factura-demo-multipagina.pdf); la segunda tiene tres páginas. Se revisaron sus páginas renderizadas y el texto extraído.
 
 Estas pruebas no sustituyen un recorrido integral **backend + navegador real** de esta versión. La suite backend corrió sobre H2; no demuestra el comportamiento en PostgreSQL. Tampoco hay autorización fiscal real: el CAE es **simulado** y el PDF declara que el comprobante académico no tiene validez fiscal.

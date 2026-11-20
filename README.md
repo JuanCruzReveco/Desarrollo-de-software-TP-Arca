@@ -285,7 +285,7 @@ Base local: `http://localhost:8080/api`. Las escrituras reciben JSON. El reporte
 
 Listado y reporte comparten los filtros opcionales `fechaDesde`, `fechaHasta` (formato `yyyy-MM-dd`, límites inclusivos), `estado` y `montoMinimo` (total mínimo inclusivo y finito). Se rechazan fechas invertidas y estados inválidos. El estado se normaliza a mayúsculas y se recortan espacios.
 
-La consulta JPQL proyecta DTOs con `SELECT new`, utiliza parámetros y cuenta renglones con `LEFT JOIN`. Ordena por fecha de emisión descendente y luego ID descendente. La interfaz pagina el listado de facturas de diez en diez; la API devuelve la lista completa y no ofrece paginación de servidor ni filtro por punto de venta. Las fechas visibles se escriben y muestran como **DD/MM/AAAA** (día/mes/año), con barras automáticas, solo ocho dígitos y límites de 31 para el día y 12 para el mes; las fechas JSON y los parámetros de la API conservan **`yyyy-MM-dd`**.
+La consulta JPQL proyecta DTOs con `SELECT new`, utiliza parámetros y cuenta renglones con `LEFT JOIN`. Ordena por fecha de emisión descendente y luego ID descendente. La interfaz pagina el listado de facturas de diez en diez; la API devuelve la lista completa y no ofrece paginación de servidor ni filtro por punto de venta. Las fechas visibles se escriben y muestran como **DD/MM/AAAA** (día/mes/año), con barras automáticas, solo ocho dígitos y límites de 31 para el día y 12 para el mes; las fechas JSON y los parámetros de la API conservan **`yyyy-MM-dd`**. El filtro **Hasta** no admite fechas posteriores al día actual y muestra el máximo junto al campo.
 
 ### Contrato de escritura y catálogos
 
@@ -371,7 +371,7 @@ npm ci
 npm test
 ```
 
-`npm test` compila TypeScript y ejecuta `test/app.test.mjs` con jsdom y módulos VM. La suite actual pasó **50/50** pruebas, incluidas las de exploradores, selección de lista, fechas y acción Imprimir. Prueba DOM y cliente HTTP simulado; no equivale a una sesión completa en un navegador real. `npm run build` comprueba solo la compilación.
+`npm test` compila TypeScript y ejecuta `test/app.test.mjs` con jsdom y módulos VM. La suite actual pasó **51/51** pruebas, incluidas las de exploradores, selección de lista, fechas y acción Imprimir. Prueba DOM y cliente HTTP simulado; no equivale a una sesión completa en un navegador real. `npm run build` comprueba solo la compilación.
 
 ### Evidencia de verificación
 

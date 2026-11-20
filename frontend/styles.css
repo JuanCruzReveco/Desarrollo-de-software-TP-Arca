@@ -66,6 +66,7 @@ body {
 .etiqueta-campo { font-size: 12px; color: var(--muted); }
 .campo-explorer output { display: block; min-height: 35px; padding: 7px 9px; border: 1px solid var(--borde); border-radius: 6px; background: #f8fafc; overflow-wrap: anywhere; }
 .campo-explorer small { color: var(--muted); }
+.ayuda-campo { display: block; margin-top: 4px; color: var(--muted); font-size: 11px; }
 .acciones-campo { display: flex; gap: 6px; flex-wrap: wrap; }
 .acciones-campo .btn { flex: 1 1 auto; }
 

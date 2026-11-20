@@ -21,7 +21,7 @@
       <h2>Buscar comprobantes</h2>
       <form id="form-filtros" class="grid grid--4">
         <label>Desde (DD/MM/AAAA) <input type="text" name="fechaDesde" inputmode="numeric" placeholder="DD/MM/AAAA" maxlength="10" autocomplete="off"></label>
-        <label>Hasta (DD/MM/AAAA) <input type="text" name="fechaHasta" inputmode="numeric" placeholder="DD/MM/AAAA" maxlength="10" autocomplete="off"></label>
+        <label>Hasta (DD/MM/AAAA) <input type="text" name="fechaHasta" inputmode="numeric" placeholder="DD/MM/AAAA" maxlength="10" autocomplete="off" aria-describedby="fecha-hasta-maximo"><small id="fecha-hasta-maximo" class="ayuda-campo"></small></label>
         <label>Estado
           <select name="estado">
             <option value="">Todos</option>

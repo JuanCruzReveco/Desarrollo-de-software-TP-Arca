@@ -79,6 +79,23 @@ function fechaHoyVisible(): string {
   return `${String(hoy.getDate()).padStart(2, '0')}/${String(hoy.getMonth() + 1).padStart(2, '0')}/${hoy.getFullYear()}`;
 }
 
+function aplicarMascaraFecha(campo: HTMLInputElement, borrando: boolean): void {
+  let digitos = campo.value.replace(/\D/g, '').slice(0, 8);
+  if (digitos && Number(digitos[0]) > 3) digitos = '';
+  if (digitos.length >= 2 && (Number(digitos.slice(0, 2)) < 1 || Number(digitos.slice(0, 2)) > 31)) {
+    digitos = digitos.slice(0, 1);
+  }
+  if (digitos.length >= 3 && Number(digitos[2]) > 1) digitos = digitos.slice(0, 2);
+  if (digitos.length >= 4 && (Number(digitos.slice(2, 4)) < 1 || Number(digitos.slice(2, 4)) > 12)) {
+    digitos = digitos.slice(0, 3);
+  }
+  if (digitos.length < 2) campo.value = digitos;
+  else if (digitos.length === 2) campo.value = digitos + (borrando ? '' : '/');
+  else if (digitos.length < 4) campo.value = `${digitos.slice(0, 2)}/${digitos.slice(2)}`;
+  else if (digitos.length === 4) campo.value = `${digitos.slice(0, 2)}/${digitos.slice(2)}` + (borrando ? '' : '/');
+  else campo.value = `${digitos.slice(0, 2)}/${digitos.slice(2, 4)}/${digitos.slice(4)}`;
+}
+
 function fechaIso(valor: string, campo: string): string | undefined {
   const texto = valor.trim();
   if (!texto) return undefined;
@@ -586,6 +603,9 @@ async function accionFila(accion: string, id: number): Promise<void> {
 // ============================ Wiring de eventos ============================
 
 function conectarEventos(): void {
+  document.querySelectorAll<HTMLInputElement>('[name="fechaDesde"], [name="fechaHasta"], [name="fechaEmision"]').forEach(campo => {
+    campo.addEventListener('input', ev => aplicarMascaraFecha(campo, (ev as InputEvent).inputType?.startsWith('delete') ?? false));
+  });
   $<HTMLFormElement>('#form-filtros').addEventListener('submit', (ev) => { ev.preventDefault(); void buscar(); });
   $<HTMLButtonElement>('#btn-limpiar-filtros').addEventListener('click', () => {
     $<HTMLFormElement>('#form-filtros').reset();

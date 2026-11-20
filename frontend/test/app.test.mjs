@@ -492,6 +492,41 @@ test('invoice and filter dates display day first while API receives ISO dates', 
   assert.equal(JSON.parse(ui.requests.find(r => r.method === 'POST').body).fechaEmision, '2026-11-09');
 });
 
+test('date fields insert slashes after day and month and stop at eight digits', async t => {
+  const ui = await open(t);
+  for (const name of ['fechaDesde', 'fechaHasta', 'fechaEmision']) {
+    const field = ui.document.querySelector(`[name="${name}"]`);
+    field.value = '25'; field.dispatchEvent(new ui.document.defaultView.Event('input', { bubbles: true }));
+    assert.equal(field.value, '25/');
+    field.value = '2511'; field.dispatchEvent(new ui.document.defaultView.Event('input', { bubbles: true }));
+    assert.equal(field.value, '25/11/');
+    field.value = '251120261234abc'; field.dispatchEvent(new ui.document.defaultView.Event('input', { bubbles: true }));
+    assert.equal(field.value, '25/11/2026');
+  }
+});
+
+test('date mask rejects day over 31 and month over 12 while typing', async t => {
+  const ui = await open(t);
+  const field = ui.document.querySelector('[name="fechaDesde"]');
+  field.value = '32'; field.dispatchEvent(new ui.document.defaultView.Event('input', { bubbles: true }));
+  assert.equal(field.value, '3');
+  field.value = '31/13'; field.dispatchEvent(new ui.document.defaultView.Event('input', { bubbles: true }));
+  assert.equal(field.value, '31/1');
+  field.value = '31/12/2026'; field.dispatchEvent(new ui.document.defaultView.Event('input', { bubbles: true }));
+  assert.equal(field.value, '31/12/2026');
+});
+
+test('backspace can remove an automatic date separator', async t => {
+  const ui = await open(t);
+  const field = ui.document.querySelector('[name="fechaHasta"]');
+  field.value = '31';
+  field.dispatchEvent(new ui.document.defaultView.InputEvent('input', { bubbles: true, inputType: 'deleteContentBackward' }));
+  assert.equal(field.value, '31');
+  field.value = '3';
+  field.dispatchEvent(new ui.document.defaultView.InputEvent('input', { bubbles: true, inputType: 'deleteContentBackward' }));
+  assert.equal(field.value, '3');
+});
+
 test('impossible day-first dates are rejected before sending invoice or filters', async t => {
   const ui = await open(t);
   ui.document.defaultView.console.error = () => {};

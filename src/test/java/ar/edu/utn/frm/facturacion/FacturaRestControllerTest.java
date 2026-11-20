@@ -1,6 +1,10 @@
 package ar.edu.utn.frm.facturacion;
 
 import ar.edu.utn.frm.facturacion.model.UsuarioActual;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.lowagie.text.pdf.PdfReader;
+import com.lowagie.text.pdf.parser.PdfTextExtractor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -12,7 +16,11 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+
 import static org.hamcrest.Matchers.*;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -23,6 +31,7 @@ class FacturaRestControllerTest {
 
     @Autowired MockMvc mvc;
     @Autowired DatosDePrueba datos;
+    @Autowired ObjectMapper objectMapper;
 
     @BeforeEach
     void setUp() { datos.limpiarYCargar(); }
@@ -106,6 +115,49 @@ class FacturaRestControllerTest {
         mvc.perform(get("/api/catalogos/lista-precio-articulos"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$", hasSize(2)))
                 .andExpect(jsonPath("$[0].valor").isNumber());
+    }
+
+    @Test
+    void pdfDeFacturaExigeCaeYConservaElAutorizado() throws Exception {
+        String location = mvc.perform(post("/api/facturas").contentType(MediaType.APPLICATION_JSON).content(bodyFactura()))
+                .andExpect(status().isCreated()).andReturn().getResponse().getHeader("Location");
+
+        mvc.perform(get(location + "/pdf"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail", containsString("CAE")));
+
+        mvc.perform(patch(location + "/estado").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"estado\":\"EMITIDA\"}"))
+                .andExpect(status().isOk());
+        JsonNode emitida = objectMapper.readTree(mvc.perform(get(location)).andReturn().getResponse().getContentAsString());
+
+        byte[] pdf = mvc.perform(get(location + "/pdf"))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_PDF))
+                .andExpect(header().string("Content-Disposition", containsString("inline")))
+                .andReturn().getResponse().getContentAsByteArray();
+        try (PdfReader reader = new PdfReader(pdf)) {
+            String texto = new PdfTextExtractor(reader).getTextFromPage(1);
+            assertThat(texto).contains(emitida.get("cae").asText(), "Empresa Tech S.A.", "30-71234567-8",
+                    "Calle 1", "00001-00000001");
+            assertThat(texto).contains("Fecha de emisión", "Vencimiento CAE", "Página 1 de 1",
+                    LocalDate.parse(emitida.get("caeFechaVencimiento").asText())
+                            .format(DateTimeFormatter.ofPattern("dd/MM/yyyy")));
+        }
+
+        mvc.perform(patch(location + "/estado").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"estado\":\"ANULADA\"}"))
+                .andExpect(status().isOk());
+        byte[] anulada = mvc.perform(get(location + "/pdf")).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsByteArray();
+        try (PdfReader reader = new PdfReader(anulada)) {
+            assertThat(new PdfTextExtractor(reader).getTextFromPage(1)).contains("ANULADA", emitida.get("cae").asText());
+        }
+    }
+
+    @Test
+    void pdfDeFacturaInexistenteDevuelve404() throws Exception {
+        mvc.perform(get("/api/facturas/999999/pdf")).andExpect(status().isNotFound());
     }
 }
 

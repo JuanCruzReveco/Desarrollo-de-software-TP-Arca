@@ -222,13 +222,25 @@ public class FacturaService {
                 .id(f.getId()).numero(f.getNumero()).fechaEmision(f.getFechaEmision()).estado(f.getEstado().name())
                 .clienteId(f.getCliente() != null ? f.getCliente().getId() : null)
                 .clienteDenominacion(f.getCliente() != null ? f.getCliente().getDenominacion() : "Consumidor Final")
+                .clienteCuitCuil(f.getCliente() != null ? f.getCliente().getCuitCuil() : null)
+                .clienteDomicilio(domicilioCliente(f.getCliente()))
                 .condicionIvaId(f.getCondicionIva().getId()).condicionIva(f.getCondicionIva().getDenominacion())
-                .puntoVentaId(f.getPuntoVenta().getId()).puntoVentaDescripcion(f.getPuntoVenta().getDescripcion())
-                .tipoMonedaId(f.getTipoMoneda().getId()).tipoMoneda(f.getTipoMoneda().getDenominacion())
+                .puntoVentaId(f.getPuntoVenta().getId()).puntoVentaNumero(f.getPuntoVenta().getNumero())
+                .puntoVentaDescripcion(f.getPuntoVenta().getDescripcion())
+                .tipoMonedaId(f.getTipoMoneda().getId()).codigoMoneda(f.getTipoMoneda().getCodigoAfip())
+                .tipoMoneda(f.getTipoMoneda().getDenominacion())
                 .importeTotal(f.getImporteTotal()).importeCobrado(f.getImporteCobrado()).importeSaldo(f.getImporteSaldo())
                 .cae(f.getCae()).caeFechaVencimiento(f.getCaeFechaVencimiento()).fechaAnulacion(f.getFechaAnulacion())
                 .observaciones(f.getObservaciones())
                 .detalles(detalles)
                 .build();
+    }
+
+    private static String domicilioCliente(Cliente cliente) {
+        if (cliente == null || cliente.getDomicilio() == null) return null;
+        Domicilio domicilio = cliente.getDomicilio();
+        String calle = domicilio.getNombreCalle() == null ? "" : domicilio.getNombreCalle();
+        String numero = domicilio.getNumeroCalle() == null ? "" : domicilio.getNumeroCalle();
+        return (calle + " " + numero).trim();
     }
 }

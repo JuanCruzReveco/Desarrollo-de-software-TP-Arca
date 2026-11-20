@@ -22,11 +22,15 @@ public class FacturaDetalladaDTO {
     private String estado;
     private Long clienteId;
     private String clienteDenominacion;
+    private String clienteCuitCuil;
+    private String clienteDomicilio;
     private Long condicionIvaId;
     private String condicionIva;
     private Long puntoVentaId;
+    private Integer puntoVentaNumero;
     private String puntoVentaDescripcion;
     private Long tipoMonedaId;
+    private String codigoMoneda;
     private String tipoMoneda;
     private double importeTotal;
     private double importeCobrado;

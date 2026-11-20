@@ -47,12 +47,36 @@ body {
 
 .grid { display: grid; gap: 12px; }
 .grid--4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-.grid--item { grid-template-columns: 3fr 1fr 1fr 2fr auto; align-items: end; }
+.grid--item { grid-template-columns: 1.5fr 2fr .8fr .8fr 1.7fr auto; align-items: end; }
 .span-3 { grid-column: span 3; }
 @media (max-width: 800px) {
   .grid--4, .grid--item { grid-template-columns: 1fr 1fr; }
   .span-3 { grid-column: span 2; }
 }
+@media (max-width: 500px) {
+  .grid--4, .grid--item { grid-template-columns: 1fr; }
+  .span-3 { grid-column: span 1; }
+  .topbar { align-items: flex-start; gap: 8px; flex-direction: column; }
+  .tabla { display: block; overflow-x: auto; }
+}
+
+.datos-factura { border: 1px solid var(--borde); border-radius: 8px; margin: 0; padding: 12px; }
+.datos-factura legend { font-size: 14px; font-weight: 600; padding: 0 6px; }
+.campo-explorer { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.etiqueta-campo { font-size: 12px; color: var(--muted); }
+.campo-explorer output { display: block; min-height: 35px; padding: 7px 9px; border: 1px solid var(--borde); border-radius: 6px; background: #f8fafc; overflow-wrap: anywhere; }
+.campo-explorer small { color: var(--muted); }
+.acciones-campo { display: flex; gap: 6px; flex-wrap: wrap; }
+.acciones-campo .btn { flex: 1 1 auto; }
+
+.dialogo-explorer { width: min(720px, calc(100vw - 32px)); max-height: calc(100vh - 32px); border: 1px solid var(--borde); border-radius: 10px; padding: 20px; color: var(--texto); box-shadow: 0 16px 48px #1f293344; }
+.dialogo-explorer::backdrop { background: #12233b99; }
+.dialogo-explorer h2 { margin: 0 0 14px; font-size: 18px; }
+.dialogo-explorer label input { width: 100%; }
+.explorer-scroll { max-height: min(55vh, 460px); overflow: auto; }
+.explorer-contexto { color: var(--muted); margin: 0 0 12px; }
+.explorer-paginacion { gap: 12px; }
+.explorer-paginacion span { white-space: nowrap; }
 
 label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
 input, select {
@@ -60,6 +84,7 @@ input, select {
   padding: 7px 9px; border: 1px solid var(--borde); border-radius: 6px; background: #fff;
 }
 input:focus, select:focus { outline: 2px solid rgba(40,70,110,.3); border-color: var(--primario); }
+.btn:focus-visible { outline: 2px solid var(--primario); outline-offset: 2px; }
 
 .acciones { display: flex; gap: 8px; align-items: center; margin-top: 14px; flex-wrap: wrap; }
 .acciones--span { grid-column: 1 / -1; margin-top: 2px; }

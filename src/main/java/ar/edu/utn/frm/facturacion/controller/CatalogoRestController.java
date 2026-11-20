@@ -4,6 +4,7 @@ import ar.edu.utn.frm.facturacion.dto.OpcionDTO;
 import ar.edu.utn.frm.facturacion.service.CatalogoService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -31,6 +32,11 @@ public class CatalogoRestController {
     @GetMapping("/tipos-moneda")
     public List<OpcionDTO> tiposMoneda() { return catalogoService.tiposMoneda(); }
 
+    @GetMapping("/listas-precio")
+    public List<OpcionDTO> listasPrecio() { return catalogoService.listasPrecio(); }
+
     @GetMapping("/lista-precio-articulos")
-    public List<OpcionDTO> listaPrecioArticulos() { return catalogoService.listaPrecioArticulos(); }
+    public List<OpcionDTO> listaPrecioArticulos(@RequestParam(required = false) Long listaPrecioId) {
+        return catalogoService.listaPrecioArticulos(listaPrecioId);
+    }
 }

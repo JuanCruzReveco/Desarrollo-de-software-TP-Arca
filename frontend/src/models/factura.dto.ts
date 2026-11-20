@@ -98,6 +98,7 @@ export interface OpcionDTO {
   etiqueta: string;
   valor: number | null;
   codigoMoneda?: string;
+  listaPrecioId?: number | null;
 }
 
 /** Espejo de ProblemDetail (RFC 7807) que devuelve el backend ante errores. */

@@ -24,13 +24,22 @@ const estado = {
   facturas: [] as FacturaReporteDTO[],
   filtros: {} as FacturaFiltrosDTO,
   editandoId: null as number | null,
+  clientes: [] as OpcionDTO[],
+  listasPrecio: [] as OpcionDTO[],
   articulos: [] as OpcionDTO[],
+  articulosPorLista: new Map<number, OpcionDTO[]>(),
   monedas: [] as OpcionDTO[],
   guardando: false,
   accionesPendientes: new Set<number>(),
   busqueda: 0,
   edicion: 0,
+  cargaArticulos: 0,
+  paginaClientes: 1,
+  paginaArticulos: 1,
+  paginaFacturas: 1,
 };
+
+const TAMANO_PAGINA = 10;
 
 const apiBaseUrl = document.querySelector<HTMLMetaElement>('meta[name="api-base-url"]')?.content.trim() || 'http://localhost:8080/api';
 const api = new FacturaService(apiBaseUrl);
@@ -60,7 +69,28 @@ function agregarCelda(fila: HTMLTableRowElement, texto: string | number, clase =
   celda.className = clase;
   return celda;
 }
-const formatoFecha = (iso: string) => new Date(iso + 'T00:00:00').toLocaleDateString('es-AR');
+function formatoFecha(iso: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : iso;
+}
+
+function fechaHoyVisible(): string {
+  const hoy = new Date();
+  return `${String(hoy.getDate()).padStart(2, '0')}/${String(hoy.getMonth() + 1).padStart(2, '0')}/${hoy.getFullYear()}`;
+}
+
+function fechaIso(valor: string, campo: string): string | undefined {
+  const texto = valor.trim();
+  if (!texto) return undefined;
+  const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(texto);
+  if (!match) throw new Error(`${campo}: ingresá la fecha como DD/MM/AAAA`);
+  const dia = Number(match[1]), mes = Number(match[2]), anio = Number(match[3]);
+  const fecha = new Date(Date.UTC(anio, mes - 1, dia));
+  if (fecha.getUTCFullYear() !== anio || fecha.getUTCMonth() !== mes - 1 || fecha.getUTCDate() !== dia) {
+    throw new Error(`${campo}: ingresá una fecha válida`);
+  }
+  return `${match[3]}-${match[2]}-${match[1]}`;
+}
 
 function mostrarMensaje(texto: string, tipo: 'ok' | 'error'): void {
   const el = $<HTMLParagraphElement>('#mensaje');
@@ -84,25 +114,134 @@ function llenarSelect(select: HTMLSelectElement, opciones: OpcionDTO[], conVacio
   for (const o of opciones) select.add(new Option(o.etiqueta, String(o.id)));
 }
 
+function abrirDialogo(dialogo: HTMLDialogElement, foco: HTMLInputElement): void {
+  if (typeof dialogo.showModal === 'function') dialogo.showModal();
+  else dialogo.setAttribute('open', '');
+  foco.focus();
+}
+
+function cerrarDialogo(dialogo: HTMLDialogElement, retorno: HTMLButtonElement): void {
+  if (typeof dialogo.close === 'function') dialogo.close();
+  else dialogo.removeAttribute('open');
+  retorno.focus();
+}
+
+function normalizarBusqueda(texto: string): string {
+  return texto.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es-AR');
+}
+
+function pagina<T>(opciones: T[], numero: number): { elementos: T[]; totalPaginas: number; numero: number } {
+  const totalPaginas = Math.max(1, Math.ceil(opciones.length / TAMANO_PAGINA));
+  const actual = Math.min(Math.max(numero, 1), totalPaginas);
+  return { elementos: opciones.slice((actual - 1) * TAMANO_PAGINA, actual * TAMANO_PAGINA), totalPaginas, numero: actual };
+}
+
 // ============================ Catálogos ============================
 
 async function cargarCatalogos(): Promise<void> {
-  const [pv, cli, iva, mon, art] = await Promise.all([
+  const [pv, cli, iva, mon, listas] = await Promise.all([
     api.obtenerPuntosVenta(),
     api.obtenerClientes(),
     api.obtenerCondicionesIva(),
     api.obtenerTiposMoneda(),
-    api.obtenerListaPrecioArticulos(),
+    api.obtenerListasPrecio(),
   ]);
   const form = $<HTMLFormElement>('#form-factura');
   llenarSelect(form.elements.namedItem('puntoVentaId') as HTMLSelectElement, pv);
-  llenarSelect(form.elements.namedItem('clienteId') as HTMLSelectElement, cli, 'Consumidor Final');
   llenarSelect(form.elements.namedItem('condicionIvaId') as HTMLSelectElement, iva);
   llenarSelect(form.elements.namedItem('tipoMonedaId') as HTMLSelectElement, mon);
+  llenarSelect($<HTMLSelectElement>('#lista-precio'), listas);
+  estado.clientes = cli;
+  estado.listasPrecio = listas;
   estado.monedas = mon;
   renderItems();
-  estado.articulos = art;
-  llenarSelect($<HTMLSelectElement>('#item-articulo'), art);
+  $<HTMLInputElement>('[name="fechaEmision"]').value = fechaHoyVisible();
+  if (listas.length > 0) {
+    await cargarArticulosPorLista(listas[0].id);
+  } else {
+    $<HTMLButtonElement>('#btn-buscar-articulo').disabled = true;
+  }
+}
+
+async function cargarArticulosPorLista(listaPrecioId: number): Promise<void> {
+  const solicitud = ++estado.cargaArticulos;
+  $<HTMLButtonElement>('#btn-buscar-articulo').disabled = true;
+  try {
+    const articulos = estado.articulosPorLista.get(listaPrecioId) ?? await api.obtenerListaPrecioArticulos(listaPrecioId);
+    estado.articulosPorLista.set(listaPrecioId, articulos);
+    if (solicitud !== estado.cargaArticulos) return;
+    estado.articulos = articulos;
+    estado.paginaArticulos = 1;
+    renderArticulos();
+  } finally {
+    if (solicitud === estado.cargaArticulos) $<HTMLButtonElement>('#btn-buscar-articulo').disabled = estado.guardando;
+  }
+}
+
+function seleccionarCliente(cliente: OpcionDTO | null): void {
+  $<HTMLInputElement>('[name="clienteId"]').value = cliente ? String(cliente.id) : '';
+  $<HTMLOutputElement>('#cliente-elegido').textContent = cliente?.etiqueta ?? 'Consumidor Final';
+}
+
+function seleccionarArticulo(articulo: OpcionDTO | null): void {
+  $<HTMLInputElement>('#item-articulo').value = articulo ? String(articulo.id) : '';
+  $<HTMLOutputElement>('#item-articulo-elegido').textContent = articulo?.etiqueta ?? 'Sin artículo seleccionado';
+  $<HTMLElement>('#item-precio').textContent = articulo ? `Precio: ${mostrarImporte(articulo.valor ?? 0, monedaSeleccionada())}` : '';
+}
+
+function renderClientes(): void {
+  const termino = normalizarBusqueda($<HTMLInputElement>('#buscar-cliente').value.trim());
+  const filtrados = estado.clientes.filter(c => normalizarBusqueda(c.etiqueta).includes(termino));
+  const resultado = pagina(filtrados, estado.paginaClientes);
+  estado.paginaClientes = resultado.numero;
+  const tbody = $<HTMLTableSectionElement>('#resultados-clientes');
+  tbody.innerHTML = '';
+  for (const cliente of resultado.elementos) {
+    const fila = document.createElement('tr');
+    agregarCelda(fila, cliente.etiqueta);
+    const boton = document.createElement('button');
+    boton.type = 'button'; boton.className = 'btn btn--sm'; boton.textContent = 'Seleccionar';
+    boton.dataset.seleccionarCliente = String(cliente.id);
+    agregarCelda(fila, '').append(boton);
+    tbody.append(fila);
+  }
+  if (!filtrados.length) {
+    const fila = document.createElement('tr');
+    const celda = agregarCelda(fila, 'No se encontraron clientes.'); celda.colSpan = 2;
+    tbody.append(fila);
+  }
+  $<HTMLElement>('#pagina-clientes').textContent = `Página ${resultado.numero} de ${resultado.totalPaginas}`;
+  $<HTMLButtonElement>('#clientes-anterior').disabled = resultado.numero <= 1;
+  $<HTMLButtonElement>('#clientes-siguiente').disabled = resultado.numero >= resultado.totalPaginas;
+}
+
+function renderArticulos(): void {
+  const lista = $<HTMLSelectElement>('#lista-precio');
+  $<HTMLElement>('#articulos-lista-actual').textContent = `Lista: ${lista.selectedOptions[0]?.textContent ?? 'ninguna'}`;
+  const termino = normalizarBusqueda($<HTMLInputElement>('#buscar-articulo').value.trim());
+  const filtrados = estado.articulos.filter(a => normalizarBusqueda(a.etiqueta).includes(termino));
+  const resultado = pagina(filtrados, estado.paginaArticulos);
+  estado.paginaArticulos = resultado.numero;
+  const tbody = $<HTMLTableSectionElement>('#resultados-articulos');
+  tbody.innerHTML = '';
+  for (const articulo of resultado.elementos) {
+    const fila = document.createElement('tr');
+    agregarCelda(fila, articulo.etiqueta);
+    agregarCelda(fila, mostrarImporte(articulo.valor ?? 0, monedaSeleccionada()), 'num');
+    const boton = document.createElement('button');
+    boton.type = 'button'; boton.className = 'btn btn--sm'; boton.textContent = 'Seleccionar';
+    boton.dataset.seleccionarArticulo = String(articulo.id);
+    agregarCelda(fila, '').append(boton);
+    tbody.append(fila);
+  }
+  if (!filtrados.length) {
+    const fila = document.createElement('tr');
+    const celda = agregarCelda(fila, 'No se encontraron artículos en esta lista.'); celda.colSpan = 3;
+    tbody.append(fila);
+  }
+  $<HTMLElement>('#pagina-articulos').textContent = `Página ${resultado.numero} de ${resultado.totalPaginas}`;
+  $<HTMLButtonElement>('#articulos-anterior').disabled = resultado.numero <= 1;
+  $<HTMLButtonElement>('#articulos-siguiente').disabled = resultado.numero >= resultado.totalPaginas;
 }
 
 // ============================ 1. Filtros ============================
@@ -112,21 +251,22 @@ function leerFiltros(): FacturaFiltrosDTO {
   const data = new FormData(form);
   const monto = data.get('montoMinimo') as string;
   return {
-    fechaDesde: (data.get('fechaDesde') as string) || undefined,
-    fechaHasta: (data.get('fechaHasta') as string) || undefined,
+    fechaDesde: fechaIso(data.get('fechaDesde') as string, 'Desde'),
+    fechaHasta: fechaIso(data.get('fechaHasta') as string, 'Hasta'),
     estado: (data.get('estado') as EstadoFactura | '') || undefined,
     montoMinimo: monto ? Number(monto) : undefined,
   };
 }
 
 async function buscar(): Promise<void> {
-  const filtros = leerFiltros();
   const solicitud = ++estado.busqueda;
   try {
+    const filtros = leerFiltros();
     const facturas = await api.obtenerFacturas(filtros);
     if (solicitud !== estado.busqueda) return;
     estado.filtros = filtros;
     estado.facturas = facturas;
+    estado.paginaFacturas = 1;
     renderFacturas();
     $<HTMLAnchorElement>('#link-pdf').href = api.urlReporte('pdf', estado.filtros);
     $<HTMLAnchorElement>('#link-xlsx').href = api.urlReporte('xlsx', estado.filtros);
@@ -139,11 +279,11 @@ async function buscar(): Promise<void> {
 
 function agregarItem(): void {
   if (estado.guardando) return;
-  const select = $<HTMLSelectElement>('#item-articulo');
+  const articuloId = $<HTMLInputElement>('#item-articulo').value;
   const cantidad = Number($<HTMLInputElement>('#item-cantidad').value);
   const bonif = Number($<HTMLInputElement>('#item-bonif').value);
   const descripcion = $<HTMLInputElement>('#item-descripcion').value.trim();
-  const opcion = estado.articulos.find((a) => a.id === Number(select.value));
+  const opcion = estado.articulos.find((a) => a.id === Number(articuloId));
 
   if (!opcion) return mostrarMensaje('Seleccioná un artículo', 'error');
   if (descripcion.length > 255) return mostrarMensaje('La descripción admite hasta 255 caracteres', 'error');
@@ -203,12 +343,14 @@ function leerFormularioFactura(): FacturaRequestDTO {
   const form = $<HTMLFormElement>('#form-factura');
   const data = new FormData(form);
   const clienteId = data.get('clienteId') as string;
+  const fechaEmision = fechaIso(data.get('fechaEmision') as string, 'Fecha de emisión');
+  if (!fechaEmision) throw new Error('Fecha de emisión: ingresá una fecha en formato DD/MM/AAAA');
   return {
     clienteId: clienteId ? Number(clienteId) : null,
     condicionIvaId: Number(data.get('condicionIvaId')),
     puntoVentaId: Number(data.get('puntoVentaId')),
     tipoMonedaId: Number(data.get('tipoMonedaId')),
-    fechaEmision: (data.get('fechaEmision') as string) || undefined,
+    fechaEmision,
     observaciones: (data.get('observaciones') as string) || undefined,
     detalles: estado.items.map(({ listaPrecioArticuloId, cantidad, porcentajeBonificacion, descripcion }) => ({
       listaPrecioArticuloId, cantidad, porcentajeBonificacion, descripcion,
@@ -220,7 +362,9 @@ async function guardarFactura(ev: Event): Promise<void> {
   ev.preventDefault();
   if (estado.guardando) return;
   if (estado.items.length === 0) return mostrarMensaje('Agregá al menos un renglón', 'error');
-  const request = leerFormularioFactura();
+  let request: FacturaRequestDTO;
+  try { request = leerFormularioFactura(); }
+  catch (err) { return mostrarMensaje(String(err instanceof Error ? err.message : err), 'error'); }
   estado.guardando = true;
   ++estado.edicion;
   bloquearFormulario(true);
@@ -244,6 +388,8 @@ async function guardarFactura(ev: Event): Promise<void> {
 
 function bloquearFormulario(bloqueado: boolean): void {
   document.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLButtonElement>('#form-factura input, #form-factura select, #form-factura button').forEach(el => { el.disabled = bloqueado; });
+  document.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLButtonElement>('[form="form-item"]').forEach(el => { el.disabled = bloqueado; });
+  $<HTMLButtonElement>('#btn-buscar-articulo').disabled = bloqueado || estado.listasPrecio.length === 0;
   $<HTMLFormElement>('#form-factura').setAttribute('aria-busy', String(bloqueado));
   renderFacturas();
 }
@@ -252,6 +398,11 @@ function limpiarFormulario(trasGuardar = false): void {
   if (estado.guardando && !trasGuardar) return;
   ++estado.edicion;
   $<HTMLFormElement>('#form-factura').reset();
+  $<HTMLInputElement>('[name="fechaEmision"]').value = fechaHoyVisible();
+  seleccionarCliente(null);
+  seleccionarArticulo(null);
+  $<HTMLSelectElement>('#lista-precio').value = estado.listasPrecio[0] ? String(estado.listasPrecio[0].id) : '';
+  if (estado.listasPrecio[0]) void cargarArticulosPorLista(estado.listasPrecio[0].id);
   estado.items = [];
   estado.editandoId = null;
   renderItems();
@@ -268,19 +419,29 @@ async function editarFactura(f: FacturaReporteDTO): Promise<void> {
   try {
     const det = await api.obtenerFactura(f.id);
     if (solicitud !== estado.edicion || estado.guardando) return;
+    const todosArticulos = await api.obtenerListaPrecioArticulos();
+    if (solicitud !== estado.edicion || estado.guardando) return;
+    const primeraListaId = todosArticulos.find(a => a.id === det.detalles[0]?.listaPrecioArticuloId)?.listaPrecioId
+      ?? estado.listasPrecio[0]?.id;
+    if (primeraListaId !== undefined) {
+      $<HTMLSelectElement>('#lista-precio').value = String(primeraListaId);
+      await cargarArticulosPorLista(primeraListaId);
+      if (solicitud !== estado.edicion || estado.guardando) return;
+    }
+    seleccionarArticulo(null);
     const form = $<HTMLFormElement>('#form-factura');
     (form.elements.namedItem('puntoVentaId') as HTMLSelectElement).value = String(det.puntoVentaId);
-    (form.elements.namedItem('clienteId') as HTMLSelectElement).value = det.clienteId ? String(det.clienteId) : '';
+    seleccionarCliente(det.clienteId ? estado.clientes.find(c => c.id === det.clienteId) ?? { id: det.clienteId, etiqueta: det.clienteDenominacion, valor: null } : null);
     (form.elements.namedItem('condicionIvaId') as HTMLSelectElement).value = String(det.condicionIvaId);
     (form.elements.namedItem('tipoMonedaId') as HTMLSelectElement).value = String(det.tipoMonedaId);
-    (form.elements.namedItem('fechaEmision') as HTMLInputElement).value = det.fechaEmision ?? '';
+    (form.elements.namedItem('fechaEmision') as HTMLInputElement).value = formatoFecha(det.fechaEmision);
     (form.elements.namedItem('observaciones') as HTMLInputElement).value = det.observaciones ?? '';
     estado.items = det.detalles.map((d) => ({
         listaPrecioArticuloId: d.listaPrecioArticuloId,
         cantidad: d.cantidad,
         porcentajeBonificacion: d.porcentajeBonificacion,
         descripcion: d.descripcion,
-        etiqueta: estado.articulos.find((a) => a.id === d.listaPrecioArticuloId)?.etiqueta ?? `#${d.listaPrecioArticuloId}`,
+        etiqueta: todosArticulos.find((a) => a.id === d.listaPrecioArticuloId)?.etiqueta ?? `#${d.listaPrecioArticuloId}`,
         precioUnitario: d.precioUnitario,
     }));
     estado.editandoId = f.id;
@@ -301,8 +462,13 @@ function renderFacturas(): void {
   tbody.innerHTML = '';
   $<HTMLElement>('#contador').textContent = `${estado.facturas.length} comprobante(s)`;
   $<HTMLParagraphElement>('#sin-resultados').hidden = estado.facturas.length > 0;
+  const resultado = pagina(estado.facturas, estado.paginaFacturas);
+  estado.paginaFacturas = resultado.numero;
+  $<HTMLElement>('#pagina-facturas').textContent = `Página ${resultado.numero} de ${resultado.totalPaginas}`;
+  $<HTMLButtonElement>('#facturas-anterior').disabled = resultado.numero <= 1;
+  $<HTMLButtonElement>('#facturas-siguiente').disabled = resultado.numero >= resultado.totalPaginas;
 
-  for (const f of estado.facturas) {
+  for (const f of resultado.elementos) {
     const tr = document.createElement('tr');
     const esBorrador = f.estado === 'BORRADOR';
     const esEmitida = f.estado === 'EMITIDA';
@@ -333,6 +499,14 @@ function renderFacturas(): void {
       boton.textContent = etiqueta;
       acciones.append(boton);
     }
+    if (f.estado === 'EMITIDA' || f.estado === 'ANULADA') {
+      const imprimir = document.createElement('button');
+      imprimir.type = 'button'; imprimir.className = 'btn btn--sm';
+      imprimir.dataset.accion = 'imprimir'; imprimir.dataset.id = String(f.id);
+      imprimir.textContent = 'Imprimir';
+      imprimir.disabled = estado.guardando || estado.accionesPendientes.has(f.id);
+      acciones.append(imprimir);
+    }
     tbody.appendChild(tr);
   }
 }
@@ -348,6 +522,9 @@ async function accionFila(accion: string, id: number): Promise<void> {
   }
   try {
     switch (accion) {
+      case 'imprimir':
+        window.open(api.urlFacturaPdf(id), '_blank', 'noopener');
+        return;
       case 'emitir': {
         const r = await api.actualizarEstado(id, 'EMITIDA');
         mostrarMensaje(`Factura emitida con número ${r.numeroFactura}`, 'ok');
@@ -391,7 +568,54 @@ function conectarEventos(): void {
   });
 
   $<HTMLButtonElement>('#btn-agregar-item').addEventListener('click', agregarItem);
-  $<HTMLSelectElement>('[name="tipoMonedaId"]').addEventListener('change', renderItems);
+  $<HTMLSelectElement>('[name="tipoMonedaId"]').addEventListener('change', () => {
+    renderItems(); renderArticulos();
+    const articulo = estado.articulos.find(a => a.id === Number($<HTMLInputElement>('#item-articulo').value));
+    seleccionarArticulo(articulo ?? null);
+  });
+  $<HTMLSelectElement>('#lista-precio').addEventListener('change', () => {
+    seleccionarArticulo(null);
+    $<HTMLInputElement>('#buscar-articulo').value = '';
+    estado.articulos = [];
+    renderArticulos();
+    const id = Number($<HTMLSelectElement>('#lista-precio').value);
+    if (id) void cargarArticulosPorLista(id).catch(manejarError);
+  });
+  $<HTMLButtonElement>('#btn-buscar-cliente').addEventListener('click', () => {
+    if (estado.guardando) return;
+    $<HTMLInputElement>('#buscar-cliente').value = '';
+    estado.paginaClientes = 1; renderClientes();
+    abrirDialogo($<HTMLDialogElement>('#dialogo-clientes'), $<HTMLInputElement>('#buscar-cliente'));
+  });
+  $<HTMLButtonElement>('#btn-consumidor-final').addEventListener('click', () => { if (!estado.guardando) seleccionarCliente(null); });
+  $<HTMLInputElement>('#buscar-cliente').addEventListener('input', () => { estado.paginaClientes = 1; renderClientes(); });
+  $<HTMLButtonElement>('#clientes-anterior').addEventListener('click', () => { --estado.paginaClientes; renderClientes(); });
+  $<HTMLButtonElement>('#clientes-siguiente').addEventListener('click', () => { ++estado.paginaClientes; renderClientes(); });
+  $<HTMLButtonElement>('#cerrar-clientes').addEventListener('click', () => cerrarDialogo($<HTMLDialogElement>('#dialogo-clientes'), $<HTMLButtonElement>('#btn-buscar-cliente')));
+  $<HTMLTableSectionElement>('#resultados-clientes').addEventListener('click', ev => {
+    const boton = (ev.target as HTMLElement).closest<HTMLButtonElement>('[data-seleccionar-cliente]');
+    const cliente = estado.clientes.find(c => c.id === Number(boton?.dataset.seleccionarCliente));
+    if (!boton || !cliente || estado.guardando) return;
+    seleccionarCliente(cliente);
+    cerrarDialogo($<HTMLDialogElement>('#dialogo-clientes'), $<HTMLButtonElement>('#btn-buscar-cliente'));
+  });
+  $<HTMLButtonElement>('#btn-buscar-articulo').addEventListener('click', () => {
+    if (estado.guardando || !estado.listasPrecio.length) return;
+    $<HTMLInputElement>('#buscar-articulo').value = '';
+    estado.paginaArticulos = 1; renderArticulos();
+    abrirDialogo($<HTMLDialogElement>('#dialogo-articulos'), $<HTMLInputElement>('#buscar-articulo'));
+  });
+  $<HTMLInputElement>('#buscar-articulo').addEventListener('input', () => { estado.paginaArticulos = 1; renderArticulos(); });
+  $<HTMLButtonElement>('#articulos-anterior').addEventListener('click', () => { --estado.paginaArticulos; renderArticulos(); });
+  $<HTMLButtonElement>('#articulos-siguiente').addEventListener('click', () => { ++estado.paginaArticulos; renderArticulos(); });
+  $<HTMLButtonElement>('#cerrar-articulos').addEventListener('click', () => cerrarDialogo($<HTMLDialogElement>('#dialogo-articulos'), $<HTMLButtonElement>('#btn-buscar-articulo')));
+  $<HTMLTableSectionElement>('#resultados-articulos').addEventListener('click', ev => {
+    const boton = (ev.target as HTMLElement).closest<HTMLButtonElement>('[data-seleccionar-articulo]');
+    const articulo = estado.articulos.find(a => a.id === Number(boton?.dataset.seleccionarArticulo));
+    if (!boton || !articulo || estado.guardando) return;
+    seleccionarArticulo(articulo);
+    cerrarDialogo($<HTMLDialogElement>('#dialogo-articulos'), $<HTMLButtonElement>('#btn-buscar-articulo'));
+  });
   $<HTMLTableSectionElement>('#tabla-items tbody').addEventListener('click', (ev) => {
     const btn = (ev.target as HTMLElement).closest<HTMLButtonElement>('[data-quitar]');
     if (btn) quitarItem(Number(btn.dataset.quitar));
@@ -403,6 +627,8 @@ function conectarEventos(): void {
     const btn = (ev.target as HTMLElement).closest<HTMLButtonElement>('[data-accion]');
     if (btn && !btn.disabled) void accionFila(btn.dataset.accion!, Number(btn.dataset.id));
   });
+  $<HTMLButtonElement>('#facturas-anterior').addEventListener('click', () => { --estado.paginaFacturas; renderFacturas(); });
+  $<HTMLButtonElement>('#facturas-siguiente').addEventListener('click', () => { ++estado.paginaFacturas; renderFacturas(); });
 }
 
 // ============================ Arranque ============================

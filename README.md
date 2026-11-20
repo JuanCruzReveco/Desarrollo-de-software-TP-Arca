@@ -2,7 +2,7 @@
 
 Trabajo práctico integrador **individual** de Desarrollo de Software (UTN FRM, 2026): sistema de facturación con backend Java/Spring Boot y frontend HTML/CSS/TypeScript. Permite crear y editar borradores, emitir y anular facturas, consultar por filtros y exportar reportes.
 
-> **Declaración de origen y uso de herramientas.** La base de este repositorio proviene del **kit de nivelación publicado por la cátedra** (`arca-spirng-main`), incorporado completo en el commit inicial. Sobre esa base se agregaron pruebas de persistencia y se corrigieron dos problemas de interacción del frontend; los cambios se detallan [más abajo](#origen-del-código-y-declaración-de-uso). Se utilizaron asistentes de IA (Claude y Codex) para preparar, revisar y verificar la entrega. Los resultados citados en los informes corresponden a ejecuciones reales; cada informe distingue la evidencia propia de la heredada del kit.
+> **Declaración de origen y uso de herramientas.** La base de este repositorio proviene del **kit de nivelación publicado por la cátedra** (`arca-spirng-main`), incorporado completo en el commit inicial. Sobre esa base se agregaron pruebas de persistencia y se corrigieron problemas de interacción del frontend. Las correcciones posteriores solicitadas por el profesor se documentan en [correcciones-profesor.md](docs/correcciones-profesor.md). Para los exploradores y la impresión se usó `TP 6 Grupal  3.zip` como **referencia de patrón de interfaz**, sin trasladar integración fiscal real. Se utilizaron asistentes de IA (Claude y Codex) para preparar, revisar y verificar la entrega. Los resultados citados distinguen la evidencia propia de la heredada del kit.
 
 El backend y el frontend se ejecutan por separado. El **CAE es simulado**: no se consultan servicios fiscales de ARCA. El encabezado **`X-Usuario` identifica auditoría, sin autenticar** a quien realiza la solicitud.
 
@@ -16,6 +16,7 @@ El backend y el frontend se ejecutan por separado. El **CAE es simulado**: no se
 - [API y reglas de negocio](#api-y-reglas-de-negocio)
 - [Reportes](#reportes)
 - [Pruebas y verificación](#pruebas-y-verificación)
+- [Correcciones del profesor](docs/correcciones-profesor.md)
 - [Origen del código y declaración de uso](#origen-del-código-y-declaración-de-uso)
 - [Problemas frecuentes y límites](#problemas-frecuentes-y-límites)
 
@@ -207,11 +208,11 @@ Abrir `http://localhost:5173`. `npm run dev` compila TypeScript una vez e inicia
 
 ### 3. Recorrido de uso
 
-1. Consultar facturas y aplicar filtros.
-2. Crear una factura con los catálogos disponibles y al menos un renglón.
+1. Consultar facturas, aplicar filtros con fecha visible **DD/MM/AAAA** y recorrer páginas de diez resultados.
+2. Crear una factura: buscar y seleccionar el cliente en el explorador (o elegir Consumidor Final), seleccionar una lista de precios, buscar el artículo dentro de esa lista y agregar al menos un renglón.
 3. Editar el borrador y comprobar los importes calculados por el servidor.
 4. Emitirlo para asignar número y CAE simulado.
-5. Descargar un reporte o anular la factura emitida.
+5. Pulsar **Imprimir** para abrir el PDF de esa factura, con CAE simulado, vencimiento y páginas numeradas. También se puede descargar el reporte general o anular la factura emitida.
 
 Para recorrer la API sin interfaz, utilizar [requests.http](requests.http) con un cliente compatible. Sus IDs son ejemplos: reemplazarlos por los obtenidos de los catálogos y de la respuesta de creación si la base fue modificada.
 
@@ -267,7 +268,7 @@ Si cambia el puerto del backend, actualizar el `meta` del frontend. Si cambia el
 
 ## API y reglas de negocio
 
-Base local: `http://localhost:8080/api`. Las escrituras reciben JSON; las descargas devuelven archivos con `Content-Disposition: attachment`.
+Base local: `http://localhost:8080/api`. Las escrituras reciben JSON. El reporte general se descarga con `Content-Disposition: attachment`; el comprobante individual se abre en línea con `Content-Disposition: inline`.
 
 ### Facturas
 
@@ -275,6 +276,7 @@ Base local: `http://localhost:8080/api`. Las escrituras reciben JSON; las descar
 |---|---|---|
 | `GET` | `/api/facturas` | `200`, listado de `FacturaReporteDTO`. |
 | `GET` | `/api/facturas/{id}` | `200`, cabecera y renglones como `FacturaDetalladaDTO`. |
+| `GET` | `/api/facturas/{id}/pdf` | `200`, PDF imprimible de una factura emitida o anulada con CAE; `404` si no existe y `409` si es borrador. |
 | `POST` | `/api/facturas` | `201`, `Location` y `FacturaReporteDTO`; crea un borrador. |
 | `PUT` | `/api/facturas/{id}` | `200`, `FacturaReporteDTO`; reemplaza cabecera y detalles del borrador. |
 | `PATCH` | `/api/facturas/{id}/estado` | `200`, `FacturaReporteDTO`; emite o anula. |
@@ -283,7 +285,7 @@ Base local: `http://localhost:8080/api`. Las escrituras reciben JSON; las descar
 
 Listado y reporte comparten los filtros opcionales `fechaDesde`, `fechaHasta` (formato `yyyy-MM-dd`, límites inclusivos), `estado` y `montoMinimo` (total mínimo inclusivo y finito). Se rechazan fechas invertidas y estados inválidos. El estado se normaliza a mayúsculas y se recortan espacios.
 
-La consulta JPQL proyecta DTOs con `SELECT new`, utiliza parámetros y cuenta renglones con `LEFT JOIN`. Ordena por fecha de emisión descendente y luego ID descendente. No hay paginación ni filtro por punto de venta.
+La consulta JPQL proyecta DTOs con `SELECT new`, utiliza parámetros y cuenta renglones con `LEFT JOIN`. Ordena por fecha de emisión descendente y luego ID descendente. La interfaz pagina el listado de facturas de diez en diez; la API devuelve la lista completa y no ofrece paginación de servidor ni filtro por punto de venta. Las fechas visibles se escriben y muestran como **DD/MM/AAAA** (día/mes/año); las fechas JSON y los parámetros de la API conservan **`yyyy-MM-dd`**.
 
 ### Contrato de escritura y catálogos
 
@@ -293,7 +295,7 @@ Cada `FacturaDetalleRequestDTO` requiere `listaPrecioArticuloId` y `cantidad` ma
 
 El cambio de estado recibe, por ejemplo, `{"estado":"EMITIDA"}` o `{"estado":"ANULADA","observaciones":"Motivo"}`.
 
-Los catálogos se consultan mediante `GET /api/catalogos/` seguido de `puntos-venta`, `clientes`, `condiciones-iva`, `tipos-moneda` o `lista-precio-articulos`. Devuelven `OpcionDTO` con `id`, `etiqueta`, `valor` y `codigoMoneda`: el precio se informa en las opciones de lista de precios y el código en las opciones de moneda; los otros valores pueden ser nulos. Son consultas de solo lectura, sin CRUD público de catálogos.
+Los catálogos se consultan mediante `GET /api/catalogos/` seguido de `puntos-venta`, `clientes`, `condiciones-iva`, `tipos-moneda`, `listas-precio` o `lista-precio-articulos`. `GET /api/catalogos/lista-precio-articulos?listaPrecioId={id}` limita los artículos a una lista; sin parámetro devuelve todos. Las opciones contienen `id` y `etiqueta`; `valor` indica el precio en un artículo, `codigoMoneda` el código en una moneda y `listaPrecioId` identifica la lista de cada artículo. Los demás valores pueden ser nulos. Son consultas de solo lectura, sin CRUD público de catálogos. Los exploradores de clientes y artículos buscan y paginan **en el navegador** las opciones ya recibidas, de diez en diez.
 
 ### Estados, importes y auditoría
 
@@ -326,7 +328,7 @@ La interfaz bloquea acciones durante un guardado, conserva datos ante errores y 
 
 ## Reportes
 
-Los formatos utilizan los mismos DTOs y filtros del listado y se generan en memoria como respuesta HTTP; no se guardan automáticamente en el servidor.
+El **reporte general** utiliza los mismos DTOs y filtros del listado y se genera en memoria como respuesta HTTP. El **comprobante individual** usa el detalle de una factura emitida o anulada, incluye datos del cliente, renglones, importes, número, CAE simulado y vencimiento, y marca cada página `Página X de Y`. Ambos se generan en memoria; no se guardan automáticamente en el servidor.
 
 | Formato | Implementación |
 |---|---|
@@ -356,7 +358,7 @@ En Linux/macOS:
 ./gradlew test
 ```
 
-Las pruebas de `src/test/java/ar/edu/utn/frm/facturacion/` (76 en total: 62 del kit y 14 propias de `PersistenciaModeloTest`) cubren persistencia y restricciones, servicios y HTTP, validación, auditoría, concurrencia, cálculo y precisión monetaria, y contenido de PDF/XLSX/TXT. `DatosDePrueba` construye los fixtures. El perfil `test` usa H2 con `ddl-auto=create-drop`; el informe se genera en `build/reports/tests/test/index.html`.
+La suite original de 76 pruebas (62 del kit y 14 propias de `PersistenciaModeloTest`) cubre persistencia y restricciones, servicios y HTTP, validación, auditoría, concurrencia, cálculo y precisión monetaria, y contenido de PDF/XLSX/TXT. Las correcciones del profesor agregan pruebas del comprobante individual y de los catálogos; sus resultados actuales se registran en [correcciones-profesor.md](docs/correcciones-profesor.md). `DatosDePrueba` construye los fixtures. El perfil `test` usa H2 con `ddl-auto=create-drop`; el informe se genera en `build/reports/tests/test/index.html`.
 
 `scripts/Verify-Postgres.ps1` ejecuta la suite contra un contenedor temporal identificado por su ID completo y comprueba su identidad antes de continuar. Espera `facturacion-arca-verificacion`, imagen `postgres:16`, puerto `127.0.0.1:55432` y base `facturacion_verificacion`. No crea el contenedor y utiliza `--offline`, por lo que necesita dependencias descargadas. La suite `create-drop` no debe apuntar a una base cuyos datos se deban conservar.
 
@@ -369,11 +371,13 @@ npm ci
 npm test
 ```
 
-`npm test` compila TypeScript y ejecuta `test/app.test.mjs` con jsdom y módulos VM. Prueba DOM y cliente HTTP simulado; no equivale a una sesión completa en un navegador real. `npm run build` comprueba solo la compilación.
+`npm test` compila TypeScript y ejecuta `test/app.test.mjs` con jsdom y módulos VM. La suite actual pasó **46/46** pruebas, incluidas las de exploradores, selección de lista, fechas y acción Imprimir. Prueba DOM y cliente HTTP simulado; no equivale a una sesión completa en un navegador real. `npm run build` comprueba solo la compilación.
 
 ### Evidencia de verificación
 
 Los informes de cada etapa ([etapa-1](docs/etapa-1.md) a [etapa-5](docs/etapa-5.md)) registran qué se ejecutó, en qué entorno y con qué resultado. Los documentos que acompañaban al kit ([VERIFICACION.md](docs/kit-catedra/VERIFICACION.md), [AUDITORIA-2026-10-30.md](docs/kit-catedra/AUDITORIA-2026-10-30.md), [backend](docs/kit-catedra/BACKEND-FIXES.md), [frontend](docs/kit-catedra/FRONTEND-FIXES.md) y [reportes](docs/kit-catedra/REPORT-FIXES.md)) son evidencias del autor del kit, fechadas el 30/10/2026: no sustituyen ejecutar las pruebas después de cambiar el código.
+
+[Correcciones solicitadas por el profesor](docs/correcciones-profesor.md) registra los cambios posteriores a la entrega por etapas y sus comprobaciones. El informe de etapa 5 conserva la evidencia histórica de su fecha.
 
 La tabla [docs/correspondencia-consignas.md](docs/correspondencia-consignas.md) indica en qué archivo se cumple cada consigna del TP «CRUD Factura Venta» del Campus (DTO de entrada, servicio transaccional, endpoints, interfaces TypeScript, `FacturaService.ts`, `index.html` y `app.ts`), y enlaza los informes del integrador.
 
@@ -387,9 +391,10 @@ La tabla [docs/correspondencia-consignas.md](docs/correspondencia-consignas.md) 
 - Este README, adaptado (se retiró lo que describía material que no se incluye) y con esta declaración.
 - Pruebas propias de persistencia, `PersistenciaModeloTest` (14 pruebas): el kit no probaba restricciones de unicidad y nulidad con datos que las violen, ni que eliminar un borrador conserve los catálogos, ni la clave foránea del detalle. Se comprobó, rompiendo a propósito el código de producción, que estas pruebas fallan cuando el mapeo es incorrecto (detalle en [docs/etapa-1.md](docs/etapa-1.md)).
 - Correcciones del frontend: los campos del próximo renglón se asociaron a un formulario separado para que un renglón incompleto no invalide el guardado de una factura que ya tiene detalles; las acciones de emitir, anular y eliminar se bloquean por factura mientras esperan respuesta para evitar peticiones duplicadas. Se agregaron cuatro pruebas de regresión en `frontend/test/app.test.mjs`.
+- Correcciones posteriores a la devolución del profesor: exploradores de cliente y artículo con búsqueda y paginación de interfaz; selección explícita de lista de precios; fechas visibles en día/mes/año; PDF individual con CAE simulado, vencimiento y páginas numeradas. `TP 6 Grupal  3.zip` se consultó para el patrón de interacción; el comprobante sigue siendo académico y no invoca servicios fiscales.
 - Los informes `docs/etapa-N.md` y la verificación de las cinco etapas.
 
-**Uso de IA.** Se utilizó Claude (Anthropic) para armar el repositorio, ejecutar comprobaciones, escribir las pruebas propias de persistencia y redactar borradores de los informes. Se utilizó Codex (OpenAI) para revisar la entrega, corregir los dos problemas del frontend, agregar sus pruebas de regresión y actualizar la documentación. Los cambios y resultados se revisaron mediante el diff y las pruebas: **76/76** del backend en H2 y **34/34** del frontend con jsdom. El código heredado y los cambios propios deben ser comprendidos y explicables por el estudiante en la defensa. Los commits anteriores hechos con asistencia de Claude llevan la línea `Co-Authored-By`.
+**Uso de IA.** Se utilizó Claude (Anthropic) para armar el repositorio, ejecutar comprobaciones, escribir las pruebas propias de persistencia y redactar borradores de los informes. Se utilizó Codex (OpenAI) para revisar la entrega, corregir las fallas de interacción, implementar las correcciones pedidas por el profesor, agregar pruebas y actualizar la documentación. La verificación anterior a esta devolución fue **76/76** en backend H2 y **34/34** en frontend jsdom; los resultados posteriores se detallan en [correcciones-profesor.md](docs/correcciones-profesor.md). El código heredado y los cambios propios deben ser comprendidos y explicables por el estudiante en la defensa. Los commits anteriores hechos con asistencia de Claude llevan la línea `Co-Authored-By`.
 
 **Alcance de la verificación.** Las pruebas se ejecutaron con **H2**. PostgreSQL 16 no se probó en este equipo (no hay Docker instalado); el kit documenta una ejecución propia sobre PostgreSQL, pero ese resultado no se reproduce aquí y no debe tomarse como evidencia de este repositorio. El PDF se revisa visualmente según se indica en [docs/etapa-2.md](docs/etapa-2.md).
 
@@ -416,4 +421,4 @@ java -Duser.timezone=America/Argentina/Buenos_Aires -jar build/libs/facturacion-
 
 Esto no cambia la zona horaria del sistema operativo.
 
-La implementación no incluye autenticación/autorización, integración fiscal real, registro de pagos, CRUD de catálogos, paginación, conversión de moneda ni migraciones versionadas. Los campos de cobrado/saldo pertenecen al modelo, pero no hay un flujo HTTP de cobros. El esquema se administra mediante Hibernate (`ddl-auto=update`), los reportes se materializan en memoria y la configuración distribuida es de desarrollo.
+La implementación no incluye autenticación/autorización, integración fiscal real, registro de pagos, CRUD de catálogos, paginación **de servidor**, conversión de moneda ni migraciones versionadas. Los campos de cobrado/saldo pertenecen al modelo, pero no hay un flujo HTTP de cobros. El esquema se administra mediante Hibernate (`ddl-auto=update`), los reportes y comprobantes PDF se materializan en memoria y la configuración distribuida es de desarrollo.

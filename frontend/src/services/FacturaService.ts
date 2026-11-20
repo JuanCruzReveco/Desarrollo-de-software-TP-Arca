@@ -86,13 +86,18 @@ export class FacturaService {
     return `${this.baseUrl}/facturas/reporte?${params.toString()}`;
   }
 
+  urlFacturaPdf(id: number): string { return `${this.baseUrl}/facturas/${id}/pdf`; }
+
   // ---------------------------- Catálogos ----------------------------
 
   obtenerPuntosVenta(): Promise<OpcionDTO[]> { return this.request('/catalogos/puntos-venta'); }
   obtenerClientes(): Promise<OpcionDTO[]> { return this.request('/catalogos/clientes'); }
   obtenerCondicionesIva(): Promise<OpcionDTO[]> { return this.request('/catalogos/condiciones-iva'); }
   obtenerTiposMoneda(): Promise<OpcionDTO[]> { return this.request('/catalogos/tipos-moneda'); }
-  obtenerListaPrecioArticulos(): Promise<OpcionDTO[]> { return this.request('/catalogos/lista-precio-articulos'); }
+  obtenerListasPrecio(): Promise<OpcionDTO[]> { return this.request('/catalogos/listas-precio'); }
+  obtenerListaPrecioArticulos(listaPrecioId?: number): Promise<OpcionDTO[]> {
+    return this.request(`/catalogos/lista-precio-articulos${listaPrecioId === undefined ? '' : `?listaPrecioId=${encodeURIComponent(String(listaPrecioId))}`}`);
+  }
 
   // ---------------------------- Núcleo ----------------------------
 

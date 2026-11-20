@@ -1,5 +1,7 @@
 ### Archivo de pruebas para el REST Client de IntelliJ / VS Code.
 ### Levantar la app (./gradlew bootRun) y ejecutar cada request con "Send Request".
+### Las fechas de la API son ISO (AAAA-MM-DD). La interfaz y el PDF individual muestran DD/MM/AAAA.
+### Los ID siguientes corresponden a la carga de ejemplo; reemplazarlos si cambió la base.
 
 @host = http://localhost:8080
 @usuario = acortez
@@ -18,6 +20,18 @@ Accept: application/json
 
 ### 4. Catálogos para armar el request
 GET {{host}}/api/catalogos/lista-precio-articulos
+
+### 4a. Listas de precios disponibles para la selección del formulario
+GET {{host}}/api/catalogos/listas-precio
+Accept: application/json
+
+### 4b. Artículos de una lista de precios concreta (el ID 1 es ilustrativo)
+GET {{host}}/api/catalogos/lista-precio-articulos?listaPrecioId=1
+Accept: application/json
+
+### 4c. Clientes para el explorador (la búsqueda y paginación ocurren en el navegador)
+GET {{host}}/api/catalogos/clientes
+Accept: application/json
 
 ### 5. Crear una factura (queda en BORRADOR) -> 201 Created + header Location
 POST {{host}}/api/facturas
@@ -64,6 +78,15 @@ X-Usuario: {{usuario}}
 
 { "estado": "EMITIDA" }
 
+### 8a. Imprimir el comprobante individual emitido -> 200 PDF inline
+### Incluye número, cliente, CAE simulado, vencimiento y Página X de Y.
+GET {{host}}/api/facturas/7/pdf
+Accept: application/pdf
+
+### 8b. Un BORRADOR de ejemplo no tiene CAE -> 409 Conflict
+GET {{host}}/api/facturas/5/pdf
+Accept: application/pdf
+
 ### 9. Intentar borrar una factura EMITIDA -> 409 Conflict (regla de negocio)
 DELETE {{host}}/api/facturas/7
 
@@ -80,7 +103,11 @@ DELETE {{host}}/api/facturas/5
 ### 12. Factura inexistente -> 404 Not Found
 GET {{host}}/api/facturas/9999
 
-### 13. Reporte PDF (abrir en el navegador: http://localhost:8080/api/facturas/reporte?formato=pdf)
+### 12a. PDF de una factura inexistente -> 404 Not Found
+GET {{host}}/api/facturas/9999/pdf
+Accept: application/pdf
+
+### 13. Reporte PDF del LISTADO (distinto del comprobante individual; descarga attachment)
 GET {{host}}/api/facturas/reporte?formato=pdf
 
 ### 14. Reporte Excel con filtros

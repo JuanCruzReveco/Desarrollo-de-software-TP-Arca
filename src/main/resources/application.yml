@@ -34,6 +34,13 @@ facturacion:
   # Usuario con el que se auditan las operaciones cuando el cliente no envía el header X-Usuario
   usuario-por-defecto: sistema
 
+# Credenciales de homologación: rutas locales fuera de este repositorio.
+arca:
+  cuit: ${ARCA_CUIT:}
+  certificate-path: ${ARCA_CERTIFICATE_PATH:}
+  private-key-path: ${ARCA_PRIVATE_KEY_PATH:}
+  condicion-iva-emisor: ${ARCA_EMISOR_CONDICION_IVA:0}
+
 server:
   port: 8080
 

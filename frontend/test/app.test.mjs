@@ -8,13 +8,15 @@ const invoice = { id: 1, numeroFactura: 10, fechaEmision: '2026-10-29', clienteD
 const createdInvoice = { ...invoice, numeroFactura: null, estado: 'BORRADOR' };
 const tick = () => new Promise(resolve => setImmediate(resolve));
 
-async function open(t, { invoices = [], article = 'Artículo', post, patch, get, prompt = null, apiBase } = {}) {
+async function open(t, { invoices = [], article = 'Artículo', catalogs = {}, post, patch, get, apiBase, selectArticle = true } = {}) {
   let html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
   if (apiBase) html = html.replace(/<meta name="api-base-url"[^>]*>/, '').replace('</head>', `<meta name="api-base-url" content="${apiBase}"></head>`);
   const dom = new JSDOM(html, { url: 'http://localhost:5173', runScripts: 'outside-only' });
   t.after(() => dom.window.close());
   const requests = [];
-  dom.window.prompt = () => prompt;
+  const openedUrls = [];
+  dom.window.prompt = () => { throw new Error('prompt() is not supported'); };
+  dom.window.open = (...args) => { openedUrls.push(args); return null; };
   dom.window.HTMLElement.prototype.scrollIntoView = () => {};
   dom.window.fetch = async (url, init = {}) => {
     requests.push({ url, ...init });
@@ -23,9 +25,17 @@ async function open(t, { invoices = [], article = 'Artículo', post, patch, get,
     if (init.method === 'PATCH' && patch) return patch();
     if (init.method === 'PATCH') body = { ...invoice, estado: 'ANULADA' };
     else if (url.includes('/catalogos/')) {
-      body = url.endsWith('/tipos-moneda')
-        ? [{ id: 1, etiqueta: 'Peso ($)', valor: null, codigoMoneda: 'PES' }, { id: 2, etiqueta: 'Dólar (U$S)', valor: null, codigoMoneda: 'DOL' }]
-        : [{ id: 1, etiqueta: url.endsWith('lista-precio-articulos') ? article : 'Opción', valor: 100 }];
+      const parsed = new URL(url);
+      const path = parsed.pathname.split('/').at(-1);
+      if (path === 'clientes') body = catalogs.clients ?? [{ id: 1, etiqueta: 'Opción', valor: null }];
+      else if (path === 'configuracion-fiscal') body = catalogs.fiscal ?? { emisorCondicionIva: 1, tiposPermitidos: [1, 6] };
+      else if (path === 'condiciones-iva') body = catalogs.iva ?? [{ id: 1, etiqueta: 'IVA Responsable Inscripto', valor: null }];
+      else if (path === 'listas-precio') body = catalogs.lists ?? [{ id: 10, etiqueta: 'Lista general', valor: null }];
+      else if (path === 'lista-precio-articulos') body = parsed.searchParams.has('listaPrecioId')
+        ? catalogs.articlesByList?.[parsed.searchParams.get('listaPrecioId')] ?? [{ id: 1, etiqueta: article, valor: 100 }]
+        : catalogs.allArticles ?? [{ id: 1, etiqueta: article, valor: 100 }];
+      else if (path === 'tipos-moneda') body = [{ id: 1, etiqueta: 'Peso ($)', valor: null, codigoMoneda: 'PES' }, { id: 2, etiqueta: 'Dólar (U$S)', valor: null, codigoMoneda: 'DOL' }];
+      else body = [{ id: 1, etiqueta: 'Opción', valor: 100 }];
     } else if (get) return get(url, init);
     else body = invoices;
     return { ok: true, status: 200, json: async () => body };
@@ -43,7 +53,11 @@ async function open(t, { invoices = [], article = 'Artículo', post, patch, get,
   dom.window.document.dispatchEvent(new dom.window.Event('DOMContentLoaded'));
   await tick();
   const document = dom.window.document;
-  return { document, requests, click: selector => document.querySelector(selector).click(), submit: () => document.querySelector('#form-factura').dispatchEvent(new dom.window.Event('submit', { cancelable: true })) };
+  if (selectArticle) {
+    document.querySelector('#btn-buscar-articulo').click();
+    document.querySelector('#resultados-articulos [data-seleccionar-articulo]').click();
+  }
+  return { document, requests, openedUrls, click: selector => document.querySelector(selector).click(), submit: () => document.querySelector('#form-factura').dispatchEvent(new dom.window.Event('submit', { cancelable: true })) };
 }
 
 test('item descriptions remain literal text, never executable markup', async t => {
@@ -61,6 +75,25 @@ const search = (ui, state) => {
   ui.document.querySelector('#form-filtros').dispatchEvent(new ui.document.defaultView.Event('submit', { cancelable: true }));
 };
 const detail = id => ({ ...createdInvoice, id, puntoVentaId: 1, clienteId: null, condicionIvaId: 1, tipoMonedaId: 1, detalles: [{ listaPrecioArticuloId: 1, cantidad: 1, precioUnitario: 100, descripcion: `Detalle ${id}` }] });
+
+test('defaults to B for consumer final and switches to A for an identified RI receiver', async t => {
+  const ui = await open(t, { catalogs: { iva: [
+    { id: 1, etiqueta: 'IVA Responsable Inscripto', valor: 1 },
+    { id: 2, etiqueta: 'Consumidor Final', valor: 5 },
+  ] } });
+  assert.equal(ui.document.querySelector('[name="condicionIvaId"]').value, '2');
+  assert.match(ui.document.querySelector('#tipo-comprobante-previsto').textContent, /Factura B/);
+  ui.document.querySelector('[name="condicionIvaId"]').value = '1';
+  ui.document.querySelector('[name="condicionIvaId"]').dispatchEvent(new ui.document.defaultView.Event('change'));
+  assert.match(ui.document.querySelector('#tipo-comprobante-previsto').textContent, /Factura A/);
+});
+
+test('shows C for monotributo issuer and does not invent type without issuer config', async t => {
+  const mono = await open(t, { catalogs: { fiscal: { emisorCondicionIva: 6, tiposPermitidos: [11] } } });
+  assert.match(mono.document.querySelector('#tipo-comprobante-previsto').textContent, /Factura C/);
+  const missing = await open(t, { catalogs: { fiscal: { emisorCondicionIva: 0, tiposPermitidos: [] } } });
+  assert.match(missing.document.querySelector('#tipo-comprobante-previsto').textContent, /configur/i);
+});
 
 test('latest search wins when responses arrive in reverse order', async t => {
   const older = deferred(), newer = deferred();
@@ -195,18 +228,41 @@ test('API customer and catalog text cannot insert HTML nodes', async t => {
 });
 
 test('canceling annulment leaves invoice unchanged without a PATCH', async t => {
-  const ui = await open(t, { invoices: [invoice], prompt: null });
+  const ui = await open(t, { invoices: [invoice] });
   ui.click('[data-accion="anular"]');
+  assert.equal(ui.document.querySelector('#dialogo-anulacion').open, true);
+  ui.click('#cancelar-anulacion');
   await tick();
   assert.equal(ui.requests.filter(r => r.method === 'PATCH').length, 0);
 });
 
 test('accepting an empty annulment reason still annuls', async t => {
-  const ui = await open(t, { invoices: [invoice], prompt: '' });
+  const ui = await open(t, { invoices: [invoice] });
   ui.click('[data-accion="anular"]');
+  ui.click('#confirmar-anulacion');
   await tick();
   const patch = ui.requests.find(r => r.method === 'PATCH');
   assert.deepEqual(JSON.parse(patch.body), { estado: 'ANULADA' });
+});
+
+test('annulment dialog sends a typed reason without using browser prompt', async t => {
+  const ui = await open(t, { invoices: [invoice] });
+  ui.click('[data-accion="anular"]');
+  ui.document.querySelector('#motivo-anulacion').value = '  Error de carga  ';
+  ui.click('#confirmar-anulacion');
+  await tick();
+  const patch = ui.requests.find(r => r.method === 'PATCH');
+  assert.deepEqual(JSON.parse(patch.body), { estado: 'ANULADA', observaciones: 'Error de carga' });
+});
+
+test('ARCA-authorized invoice cannot be locally annulled from the list', async t => {
+  const ui = await open(t, { invoices: [{ ...invoice, autorizacionArca: true }] });
+  const annul = ui.document.querySelector('[data-accion="anular"]');
+  assert.equal(annul.disabled, true);
+  assert.match(annul.title, /nota de cr[eé]dito/i);
+  annul.click();
+  assert.equal(ui.requests.filter(r => r.method === 'PATCH').length, 0);
+  assert.equal(ui.document.querySelector('[data-accion="imprimir"]').disabled, false);
 });
 
 test('repeated submit while saving produces only one invoice request', async t => {
@@ -323,12 +379,283 @@ test('double clicking Emitir sends only one PATCH while the first is pending', a
   await tick();
 });
 
+test('approved emission shows the CAE returned by ARCA and its expiry', async t => {
+  let listCalls = 0;
+  const approved = { ...invoice, numeroFactura: 42 };
+  const authorizedDetail = { ...detail(1), ...approved, numero: 42, autorizacionArca: true,
+    cae: '12345678901234', caeFechaVencimiento: '2026-11-30' };
+  const ui = await open(t, { patch: () => response(approved), get: url =>
+    /facturas\/1$/.test(url) ? response(authorizedDetail) :
+      response(listCalls++ === 0 ? [createdInvoice] : [approved]) });
+  ui.click('[data-accion="emitir"]');
+  await tick(); await tick();
+  assert.match(ui.document.querySelector('#mensaje').textContent, /CAE 12345678901234/);
+  assert.match(ui.document.querySelector('#mensaje').textContent, /30\/11\/2026/);
+  assert.match(ui.document.querySelector('#mensaje').textContent, /homologaci[oó]n/i);
+});
+
+test('emission without verified ARCA provenance does not claim a real CAE', async t => {
+  let listCalls = 0;
+  const ui = await open(t, { patch: () => response(invoice), get: url =>
+    /facturas\/1$/.test(url) ? response({ ...detail(1), ...invoice, cae: '12345678901234',
+      caeFechaVencimiento: '2026-11-30', autorizacionArca: false }) :
+      response(listCalls++ === 0 ? [createdInvoice] : [invoice]) });
+  ui.click('[data-accion="emitir"]');
+  await tick(); await tick();
+  assert.match(ui.document.querySelector('#mensaje').textContent, /No se pudo confirmar el CAE/);
+  assert.doesNotMatch(ui.document.querySelector('#mensaje').textContent, /ARCA homologación autorizó/);
+});
+
+test('failed emission keeps the error visible and refreshes invoice state', async t => {
+  let listCalls = 0;
+  const ui = await open(t, { patch: () => ({ ok: false, status: 409,
+    json: async () => ({ title: 'ARCA rechazó el comprobante', detail: 'Documento inválido' }) }),
+    get: () => response(listCalls++ === 0 ? [createdInvoice] : [createdInvoice]) });
+  ui.document.defaultView.console.error = () => {};
+  ui.click('[data-accion="emitir"]');
+  await tick(); await tick();
+  assert.match(ui.document.querySelector('#mensaje').textContent, /Documento inválido/);
+  assert.equal(ui.requests.filter(r => /\/facturas(?:\?|$)/.test(r.url) && !r.method).length, 2);
+  assert.match(ui.document.querySelector('#tabla-facturas tbody').textContent, /BORRADOR/);
+});
+
 test('double clicking Anular sends only one PATCH while the first is pending', async t => {
   const pending = deferred();
-  const ui = await open(t, { invoices: [invoice], prompt: '', patch: () => pending.promise });
+  const ui = await open(t, { invoices: [invoice], patch: () => pending.promise });
   ui.click('[data-accion="anular"]');
+  ui.click('#confirmar-anulacion');
+  await tick();
   ui.click('[data-accion="anular"]');
   assert.equal(ui.requests.filter(r => r.method === 'PATCH').length, 1);
   pending.resolve(response({ ...invoice, estado: 'ANULADA' }));
   await tick();
+});
+
+test('client explorer searches, selects the ID, and can restore Consumidor Final', async t => {
+  const clients = Array.from({ length: 12 }, (_, i) => ({ id: i + 11, etiqueta: `Cliente ${i + 1} (20${String(i).padStart(9, '0')})`, valor: null }));
+  const ui = await open(t, { catalogs: { clients } });
+  ui.click('#btn-buscar-cliente');
+  assert.equal(ui.document.querySelector('#dialogo-clientes').open, true);
+  assert.match(ui.document.querySelector('#pagina-clientes').textContent, /1 de 2/);
+  ui.click('#clientes-siguiente');
+  assert.ok(ui.document.querySelector('[data-seleccionar-cliente="22"]'));
+  ui.document.querySelector('#buscar-cliente').value = 'Cliente 12';
+  ui.document.querySelector('#buscar-cliente').dispatchEvent(new ui.document.defaultView.Event('input'));
+  assert.match(ui.document.querySelector('#pagina-clientes').textContent, /1 de 1/);
+  ui.click('[data-seleccionar-cliente="22"]');
+  assert.equal(ui.document.querySelector('[name="clienteId"]').value, '22');
+  assert.match(ui.document.querySelector('#cliente-elegido').textContent, /Cliente 12/);
+  ui.click('#btn-consumidor-final');
+  assert.equal(ui.document.querySelector('[name="clienteId"]').value, '');
+  assert.equal(ui.document.querySelector('#cliente-elegido').textContent, 'Consumidor Final');
+});
+
+test('new invoice requires an explicit article choice from the explorer', async t => {
+  const ui = await open(t, { selectArticle: false });
+  assert.equal(ui.document.querySelector('#item-articulo').value, '');
+  assert.equal(ui.document.querySelector('#item-articulo-elegido').textContent, 'Sin artículo seleccionado');
+  ui.click('#btn-agregar-item');
+  assert.equal(ui.document.querySelector('#tabla-items tbody').children.length, 0);
+  assert.match(ui.document.querySelector('#mensaje').textContent, /Seleccioná un artículo/);
+});
+
+test('new invoice adds only the article explicitly chosen from its price list', async t => {
+  const ui = await open(t, { selectArticle: false, catalogs: { articlesByList: { 10: [
+    { id: 101, etiqueta: 'A - Arroz', valor: 120, listaPrecioId: 10 },
+    { id: 102, etiqueta: 'B - Aceite', valor: 85, listaPrecioId: 10 },
+  ] } } });
+  ui.click('#btn-buscar-articulo');
+  ui.click('[data-seleccionar-articulo="102"]');
+  assert.equal(ui.document.querySelector('#item-articulo').value, '102');
+  ui.click('#btn-agregar-item');
+  assert.match(ui.document.querySelector('#tabla-items tbody').textContent, /Aceite/);
+  ui.submit();
+  await tick();
+  assert.equal(JSON.parse(ui.requests.find(r => r.method === 'POST').body).detalles[0].listaPrecioArticuloId, 102);
+});
+
+test('article explorer filters by explicit price list and saves the selected article ID', async t => {
+  const catalogs = {
+    lists: [{ id: 10, etiqueta: 'Minorista', valor: null }, { id: 20, etiqueta: 'Mayorista', valor: null }],
+    articlesByList: {
+      10: [{ id: 101, etiqueta: 'A - Arroz', valor: 120, listaPrecioId: 10 }],
+      20: [{ id: 202, etiqueta: 'B - Aceite', valor: 85.5, listaPrecioId: 20 }],
+    },
+  };
+  const ui = await open(t, { catalogs });
+  const list = ui.document.querySelector('#lista-precio');
+  list.value = '20';
+  list.dispatchEvent(new ui.document.defaultView.Event('change'));
+  await tick();
+  assert.ok(ui.requests.some(r => r.url.endsWith('/catalogos/lista-precio-articulos?listaPrecioId=20')));
+  ui.click('#btn-buscar-articulo');
+  assert.equal(ui.document.querySelector('[data-seleccionar-articulo="101"]'), null);
+  ui.click('[data-seleccionar-articulo="202"]');
+  assert.equal(ui.document.querySelector('#item-articulo').value, '202');
+  assert.match(ui.document.querySelector('#item-precio').textContent, /85,50/);
+  ui.click('#btn-agregar-item');
+  ui.submit();
+  await tick();
+  assert.equal(JSON.parse(ui.requests.find(r => r.method === 'POST').body).detalles[0].listaPrecioArticuloId, 202);
+});
+
+test('article explorer paginates search results and clears selection when price list changes', async t => {
+  const articles = Array.from({ length: 12 }, (_, i) => ({ id: i + 100, etiqueta: `Artículo ${i + 1}`, valor: i + 1, listaPrecioId: 10 }));
+  const ui = await open(t, { catalogs: { lists: [{ id: 10, etiqueta: 'A', valor: null }, { id: 20, etiqueta: 'B', valor: null }], articlesByList: { 10: articles, 20: [{ id: 999, etiqueta: 'Otro', valor: 99, listaPrecioId: 20 }] } } });
+  ui.click('#btn-buscar-articulo');
+  assert.match(ui.document.querySelector('#pagina-articulos').textContent, /1 de 2/);
+  ui.click('#articulos-siguiente');
+  ui.click('[data-seleccionar-articulo="111"]');
+  assert.equal(ui.document.querySelector('#item-articulo').value, '111');
+  const list = ui.document.querySelector('#lista-precio');
+  list.value = '20';
+  list.dispatchEvent(new ui.document.defaultView.Event('change'));
+  await tick();
+  assert.equal(ui.document.querySelector('#item-articulo').value, '');
+  assert.equal(ui.document.querySelector('#item-articulo-elegido').textContent, 'Sin artículo seleccionado');
+});
+
+test('article explorer searches codes and accented names within the chosen list', async t => {
+  const ui = await open(t, { catalogs: { articlesByList: { 10: [
+    { id: 100, etiqueta: 'A1 - Café molido', valor: 150, listaPrecioId: 10 },
+    { id: 101, etiqueta: 'B2 - Té negro', valor: 80, listaPrecioId: 10 },
+  ] } } });
+  ui.click('#btn-buscar-articulo');
+  const input = ui.document.querySelector('#buscar-articulo');
+  input.value = 'cafe'; input.dispatchEvent(new ui.document.defaultView.Event('input'));
+  assert.ok(ui.document.querySelector('[data-seleccionar-articulo="100"]'));
+  assert.equal(ui.document.querySelector('[data-seleccionar-articulo="101"]'), null);
+  input.value = 'sin resultado'; input.dispatchEvent(new ui.document.defaultView.Event('input'));
+  assert.match(ui.document.querySelector('#resultados-articulos').textContent, /No se encontraron/);
+});
+
+test('editing restores the invoice customer, price list, and day-first date', async t => {
+  const article10 = { id: 101, etiqueta: 'A - Arroz', valor: 120, listaPrecioId: 10 };
+  const article20 = { id: 202, etiqueta: 'B - Aceite', valor: 85, listaPrecioId: 20 };
+  const catalogs = {
+    clients: [{ id: 5, etiqueta: 'Cliente elegido (20123456789)', valor: null }],
+    lists: [{ id: 10, etiqueta: 'Minorista', valor: null }, { id: 20, etiqueta: 'Mayorista', valor: null }],
+    articlesByList: { 10: [article10], 20: [article20] },
+    allArticles: [article10, article20],
+  };
+  const draft = { ...createdInvoice, id: 2 };
+  const ui = await open(t, { invoices: [draft], catalogs, get: url => /facturas\/2$/.test(url) ? response({ ...detail(2), clienteId: 5, clienteDenominacion: 'Cliente elegido', fechaEmision: '2026-11-09', detalles: [{ listaPrecioArticuloId: 202, cantidad: 1, precioUnitario: 85, descripcion: 'Aceite' }] }) : response([draft]) });
+  ui.click('[data-accion="editar"]'); await tick();
+  assert.equal(ui.document.querySelector('#lista-precio').value, '20');
+  assert.equal(ui.document.querySelector('[name="clienteId"]').value, '5');
+  assert.match(ui.document.querySelector('#cliente-elegido').textContent, /Cliente elegido/);
+  assert.equal(ui.document.querySelector('[name="fechaEmision"]').value, '09/11/2026');
+  assert.equal(ui.document.querySelector('#item-articulo').value, '');
+});
+
+test('invoice and filter dates display day first while API receives ISO dates', async t => {
+  const ui = await open(t);
+  const date = ui.document.querySelector('[name="fechaEmision"]');
+  assert.equal(date.type, 'text');
+  assert.match(date.value, /^\d{2}\/\d{2}\/\d{4}$/);
+  date.value = '09/11/2026';
+  ui.document.querySelector('[name="fechaDesde"]').value = '01/11/2020';
+  ui.document.querySelector('[name="fechaHasta"]').value = '30/11/2020';
+  ui.document.querySelector('#form-filtros').dispatchEvent(new ui.document.defaultView.Event('submit', { cancelable: true }));
+  await tick();
+  assert.ok(ui.requests.some(r => r.url.includes('fechaDesde=2020-11-01') && r.url.includes('fechaHasta=2020-11-30')));
+  ui.click('#btn-agregar-item'); ui.submit(); await tick();
+  assert.equal(JSON.parse(ui.requests.find(r => r.method === 'POST').body).fechaEmision, '2026-11-09');
+});
+
+test('date fields insert slashes after day and month and stop at eight digits', async t => {
+  const ui = await open(t);
+  for (const name of ['fechaDesde', 'fechaHasta', 'fechaEmision']) {
+    const field = ui.document.querySelector(`[name="${name}"]`);
+    field.value = '25'; field.dispatchEvent(new ui.document.defaultView.Event('input', { bubbles: true }));
+    assert.equal(field.value, '25/');
+    field.value = '2511'; field.dispatchEvent(new ui.document.defaultView.Event('input', { bubbles: true }));
+    assert.equal(field.value, '25/11/');
+    field.value = '251120261234abc'; field.dispatchEvent(new ui.document.defaultView.Event('input', { bubbles: true }));
+    assert.equal(field.value, '25/11/2026');
+  }
+});
+
+test('date mask rejects day over 31 and month over 12 while typing', async t => {
+  const ui = await open(t);
+  const field = ui.document.querySelector('[name="fechaDesde"]');
+  field.value = '32'; field.dispatchEvent(new ui.document.defaultView.Event('input', { bubbles: true }));
+  assert.equal(field.value, '3');
+  field.value = '31/13'; field.dispatchEvent(new ui.document.defaultView.Event('input', { bubbles: true }));
+  assert.equal(field.value, '31/1');
+  field.value = '31/12/2026'; field.dispatchEvent(new ui.document.defaultView.Event('input', { bubbles: true }));
+  assert.equal(field.value, '31/12/2026');
+});
+
+test('backspace can remove an automatic date separator', async t => {
+  const ui = await open(t);
+  const field = ui.document.querySelector('[name="fechaHasta"]');
+  field.value = '31';
+  field.dispatchEvent(new ui.document.defaultView.InputEvent('input', { bubbles: true, inputType: 'deleteContentBackward' }));
+  assert.equal(field.value, '31');
+  field.value = '3';
+  field.dispatchEvent(new ui.document.defaultView.InputEvent('input', { bubbles: true, inputType: 'deleteContentBackward' }));
+  assert.equal(field.value, '3');
+});
+
+test('Hasta rejects a future date but accepts today', async t => {
+  const ui = await open(t);
+  const today = new Date();
+  const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+  const visible = date => `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`;
+  const iso = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  const until = ui.document.querySelector('[name="fechaHasta"]');
+  const count = ui.requests.filter(r => r.url.includes('/facturas') && !r.method).length;
+  until.value = visible(tomorrow);
+  ui.document.querySelector('#form-filtros').dispatchEvent(new ui.document.defaultView.Event('submit', { cancelable: true }));
+  await tick();
+  assert.equal(ui.requests.filter(r => r.url.includes('/facturas') && !r.method).length, count);
+  assert.match(ui.document.querySelector('#mensaje').textContent, /hoy/i);
+  until.value = visible(today);
+  ui.document.querySelector('#form-filtros').dispatchEvent(new ui.document.defaultView.Event('submit', { cancelable: true }));
+  await tick();
+  assert.ok(ui.requests.some(r => r.url.includes(`fechaHasta=${iso(today)}`)));
+});
+
+test('impossible day-first dates are rejected before sending invoice or filters', async t => {
+  const ui = await open(t);
+  ui.document.defaultView.console.error = () => {};
+  ui.document.querySelector('[name="fechaEmision"]').value = '31/02/2026';
+  ui.click('#btn-agregar-item'); ui.submit();
+  assert.equal(ui.requests.filter(r => r.method === 'POST').length, 0);
+  assert.match(ui.document.querySelector('#mensaje').textContent, /fecha/i);
+  ui.document.querySelector('[name="fechaDesde"]').value = '32/11/2026';
+  const getCount = ui.requests.filter(r => r.url.includes('/facturas') && !r.method).length;
+  ui.document.querySelector('#form-filtros').dispatchEvent(new ui.document.defaultView.Event('submit', { cancelable: true }));
+  await tick();
+  assert.equal(ui.requests.filter(r => r.url.includes('/facturas') && !r.method).length, getCount);
+});
+
+test('invoice cannot be saved with an empty issue date even if submit is dispatched directly', async t => {
+  const ui = await open(t);
+  ui.document.querySelector('[name="fechaEmision"]').value = '';
+  ui.click('#btn-agregar-item'); ui.submit();
+  assert.equal(ui.requests.filter(r => r.method === 'POST').length, 0);
+  assert.match(ui.document.querySelector('#mensaje').textContent, /Fecha de emisión/);
+});
+
+test('print button opens invoice PDF for issued and annulled invoices only', async t => {
+  const ui = await open(t, { invoices: [createdInvoice, { ...invoice, id: 2 }, { ...invoice, id: 3, estado: 'ANULADA' }] });
+  assert.equal(ui.document.querySelector('[data-accion="imprimir"][data-id="1"]'), null);
+  ui.click('[data-accion="imprimir"][data-id="2"]');
+  ui.click('[data-accion="imprimir"][data-id="3"]');
+  assert.deepEqual(ui.openedUrls.at(-1), ['http://localhost:8080/api/facturas/3/pdf', '_blank', 'noopener']);
+  assert.equal(ui.openedUrls.length, 2);
+});
+
+test('invoice list paginates and a new filter resets to its first page', async t => {
+  const invoices = Array.from({ length: 12 }, (_, i) => ({ ...invoice, id: i + 1, numeroFactura: i + 1 }));
+  const ui = await open(t, { invoices, get: url => response(url.includes('estado=BORRADOR') ? [createdInvoice] : invoices) });
+  assert.equal(ui.document.querySelector('#tabla-facturas tbody').children.length, 10);
+  assert.match(ui.document.querySelector('#pagina-facturas').textContent, /1 de 2/);
+  ui.click('#facturas-siguiente');
+  assert.equal(ui.document.querySelector('#tabla-facturas tbody').children.length, 2);
+  search(ui, 'BORRADOR'); await tick();
+  assert.match(ui.document.querySelector('#pagina-facturas').textContent, /1 de 1/);
+  assert.equal(ui.document.querySelector('#tabla-facturas tbody').children.length, 1);
 });

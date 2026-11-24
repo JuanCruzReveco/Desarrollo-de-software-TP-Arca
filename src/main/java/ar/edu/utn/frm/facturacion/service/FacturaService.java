@@ -1,17 +1,21 @@
 package ar.edu.utn.frm.facturacion.service;
 
 import ar.edu.utn.frm.facturacion.config.FacturacionProperties;
+import ar.edu.utn.frm.facturacion.config.ArcaProperties;
 import ar.edu.utn.frm.facturacion.dto.*;
 import ar.edu.utn.frm.facturacion.exception.RecursoNoEncontradoException;
 import ar.edu.utn.frm.facturacion.exception.ReglaNegocioException;
 import ar.edu.utn.frm.facturacion.model.*;
 import ar.edu.utn.frm.facturacion.repository.*;
+import ar.edu.utn.frm.facturacion.service.arca.ArcaEmisionService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Random;
 
 /**
  * Lógica de negocio de facturación. Todas las operaciones de escritura son @Transactional:
@@ -31,12 +35,15 @@ public class FacturaService {
     private final PuntoVentaRepository puntoVentaRepo;
     private final ListaPrecioArticuloRepository listaPrecioArticuloRepo;
     private final FacturacionProperties props;
-    private final Random random = new Random();
+    private final ArcaProperties arcaProperties;
+    private final ArcaEmisionService arcaEmision;
+    private final TransactionTemplate transactions;
 
     public FacturaService(FacturaVentaRepository facturaRepo, ClienteRepository clienteRepo,
                           CondicionIvaRepository condicionIvaRepo, TipoMonedaRepository tipoMonedaRepo,
                           PuntoVentaRepository puntoVentaRepo, ListaPrecioArticuloRepository listaPrecioArticuloRepo,
-                          FacturacionProperties props) {
+                          FacturacionProperties props, ArcaProperties arcaProperties, ArcaEmisionService arcaEmision,
+                          PlatformTransactionManager manager) {
         this.facturaRepo = facturaRepo;
         this.clienteRepo = clienteRepo;
         this.condicionIvaRepo = condicionIvaRepo;
@@ -44,6 +51,9 @@ public class FacturaService {
         this.puntoVentaRepo = puntoVentaRepo;
         this.listaPrecioArticuloRepo = listaPrecioArticuloRepo;
         this.props = props;
+        this.arcaProperties = arcaProperties;
+        this.arcaEmision = arcaEmision;
+        this.transactions = new TransactionTemplate(manager);
     }
 
     // ======================= LECTURA =======================
@@ -89,23 +99,29 @@ public class FacturaService {
         return toReporte(facturaRepo.save(factura));
     }
 
-    /** Transiciones de estado: BORRADOR -> EMITIDA (asigna número/CAE) y EMITIDA -> ANULADA. */
-    @Transactional
+    /** La emisión reserva en una transacción y llama a ARCA fuera de ella. */
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public FacturaReporteDTO cambiarEstado(Long id, CambioEstadoRequestDTO request) {
-        FacturaVenta factura = buscarParaActualizar(id);
         EstadoFactura destino = parsearEstado(request.getEstado());
-        if (!factura.getEstado().puedeTransicionarA(destino)) {
-            throw new ReglaNegocioException("No se puede pasar de " + factura.getEstado() + " a " + destino);
+        if (destino == EstadoFactura.EMITIDA) {
+            arcaEmision.emitir(id, request.getObservaciones());
+            return obtenerReporte(id);
         }
-        switch (destino) {
-            case EMITIDA -> emitir(factura);
-            case ANULADA -> anular(factura);
-            default -> throw new ReglaNegocioException("Transición no soportada: " + destino);
-        }
-        if (request.getObservaciones() != null && !request.getObservaciones().isBlank()) {
-            factura.setObservaciones(request.getObservaciones());
-        }
-        return toReporte(factura);
+        return transactions.execute(status -> {
+            FacturaVenta factura = buscarParaActualizar(id);
+            if (!factura.getEstado().puedeTransicionarA(destino)) {
+                throw new ReglaNegocioException("No se puede pasar de " + factura.getEstado() + " a " + destino);
+            }
+            if (destino != EstadoFactura.ANULADA) throw new ReglaNegocioException("Transición no soportada: " + destino);
+            if (factura.getCae() != null && !factura.getCae().isBlank()) {
+                throw new ReglaNegocioException("Un CAE autorizado no se anula con un cambio de estado local; requiere una nota de crédito fiscal");
+            }
+            anular(factura);
+            if (request.getObservaciones() != null && !request.getObservaciones().isBlank()) {
+                factura.setObservaciones(request.getObservaciones());
+            }
+            return toReporte(factura);
+        });
     }
 
     /**
@@ -146,25 +162,13 @@ public class FacturaService {
             detalle.setCantidad(d.getCantidad());
             detalle.setPrecioUnitario(lpa.getPrecioVenta());          // el precio lo fija el servidor
             detalle.setPorcentajeBonificacion(d.getPorcentajeBonificacion() != null ? d.getPorcentajeBonificacion() : 0.0);
-            double alicuota = articulo.getAlicuotaIva() != null ? articulo.getAlicuotaIva() : props.ivaPorDefecto();
+            double alicuota = arcaProperties.condicionIvaEmisor() != null
+                    && (arcaProperties.condicionIvaEmisor() == 4 || arcaProperties.condicionIvaEmisor() == 6)
+                    ? 0 : articulo.getAlicuotaIva() != null ? articulo.getAlicuotaIva() : props.ivaPorDefecto();
             detalle.calcularImportes(alicuota);
             factura.agregarDetalle(detalle);
         }
         factura.recalcularImportes();
-    }
-
-    private void emitir(FacturaVenta factura) {
-        if (factura.getDetalles().isEmpty()) {
-            throw new ReglaNegocioException("No se puede emitir una factura sin detalles");
-        }
-        PuntoVenta puntoVenta = puntoVentaRepo.findParaNumerarById(factura.getPuntoVenta().getId())
-                .orElseThrow(() -> new RecursoNoEncontradoException("PuntoVenta", factura.getPuntoVenta().getId()));
-        factura.setNumero(facturaRepo.proximoNumero(puntoVenta));
-        factura.setEstado(EstadoFactura.EMITIDA);
-        // Simulación de la autorización electrónica (WSFE de ARCA)
-        factura.setCae(String.format("%014d", random.nextLong(100_000_000_000_000L)));
-        factura.setCaeFechaVencimiento(LocalDate.now().plusDays(10));
-        factura.setResultadoAfip("A");
     }
 
     private void anular(FacturaVenta factura) {
@@ -177,6 +181,9 @@ public class FacturaService {
         if (factura.getEstado() != EstadoFactura.BORRADOR) {
             throw new ReglaNegocioException("Solo se puede " + accion + " una factura en estado BORRADOR " +
                     "(actual: " + factura.getEstado() + "). Un comprobante emitido se anula, no se borra.");
+        }
+        if ("ARCA_EN_CURSO".equals(factura.getResultadoAfip()) || "ARCA_INCIERTA".equals(factura.getResultadoAfip())) {
+            throw new ReglaNegocioException("No se puede " + accion + " mientras la emisión de ARCA está pendiente de conciliación");
         }
     }
 
@@ -210,6 +217,7 @@ public class FacturaService {
                 f.getDetalles().size(),
                 f.getEstado().name());
         reporte.setCodigoMoneda(f.getTipoMoneda().getCodigoAfip());
+        reporte.setAutorizacionArca(ArcaEmisionService.APROBADA.equals(f.getResultadoAfip()));
         return reporte;
     }
 
@@ -219,16 +227,31 @@ public class FacturaService {
                 d.getDescripcion(), d.getCantidad(), d.getPrecioUnitario(), d.getPorcentajeBonificacion(),
                 d.getImporteNeto(), d.getImporteIva(), d.getImporteSubtotal())).toList();
         return FacturaDetalladaDTO.builder()
-                .id(f.getId()).numero(f.getNumero()).fechaEmision(f.getFechaEmision()).estado(f.getEstado().name())
+                .id(f.getId()).numero(f.getNumero()).tipoComprobanteArca(f.getTipoComprobanteArca())
+                .fechaEmision(f.getFechaEmision()).estado(f.getEstado().name())
                 .clienteId(f.getCliente() != null ? f.getCliente().getId() : null)
                 .clienteDenominacion(f.getCliente() != null ? f.getCliente().getDenominacion() : "Consumidor Final")
-                .condicionIvaId(f.getCondicionIva().getId()).condicionIva(f.getCondicionIva().getDenominacion())
-                .puntoVentaId(f.getPuntoVenta().getId()).puntoVentaDescripcion(f.getPuntoVenta().getDescripcion())
-                .tipoMonedaId(f.getTipoMoneda().getId()).tipoMoneda(f.getTipoMoneda().getDenominacion())
+                .clienteCuitCuil(f.getCliente() != null ? f.getCliente().getCuitCuil() : null)
+                .clienteDomicilio(domicilioCliente(f.getCliente()))
+                .condicionIvaId(f.getCondicionIva().getId()).condicionIvaCodigoAfip(f.getCondicionIva().getCodigoAfip())
+                .condicionIva(f.getCondicionIva().getDenominacion())
+                .puntoVentaId(f.getPuntoVenta().getId()).puntoVentaNumero(f.getPuntoVenta().getNumero())
+                .puntoVentaDescripcion(f.getPuntoVenta().getDescripcion())
+                .tipoMonedaId(f.getTipoMoneda().getId()).codigoMoneda(f.getTipoMoneda().getCodigoAfip())
+                .tipoMoneda(f.getTipoMoneda().getDenominacion())
                 .importeTotal(f.getImporteTotal()).importeCobrado(f.getImporteCobrado()).importeSaldo(f.getImporteSaldo())
-                .cae(f.getCae()).caeFechaVencimiento(f.getCaeFechaVencimiento()).fechaAnulacion(f.getFechaAnulacion())
+                .cae(f.getCae()).autorizacionArca(ArcaEmisionService.APROBADA.equals(f.getResultadoAfip()))
+                .caeFechaVencimiento(f.getCaeFechaVencimiento()).fechaAnulacion(f.getFechaAnulacion())
                 .observaciones(f.getObservaciones())
                 .detalles(detalles)
                 .build();
+    }
+
+    private static String domicilioCliente(Cliente cliente) {
+        if (cliente == null || cliente.getDomicilio() == null) return null;
+        Domicilio domicilio = cliente.getDomicilio();
+        String calle = domicilio.getNombreCalle() == null ? "" : domicilio.getNombreCalle();
+        String numero = domicilio.getNumeroCalle() == null ? "" : domicilio.getNumeroCalle();
+        return (calle + " " + numero).trim();
     }
 }

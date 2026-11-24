@@ -2,6 +2,7 @@ package ar.edu.utn.frm.facturacion.service;
 
 import ar.edu.utn.frm.facturacion.dto.OpcionDTO;
 import ar.edu.utn.frm.facturacion.repository.*;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,15 +17,18 @@ public class CatalogoService {
     private final ClienteRepository clienteRepo;
     private final CondicionIvaRepository condicionIvaRepo;
     private final TipoMonedaRepository tipoMonedaRepo;
+    private final ListaPrecioRepository listaPrecioRepo;
     private final ListaPrecioArticuloRepository listaPrecioArticuloRepo;
 
     public CatalogoService(PuntoVentaRepository puntoVentaRepo, ClienteRepository clienteRepo,
                            CondicionIvaRepository condicionIvaRepo, TipoMonedaRepository tipoMonedaRepo,
+                           ListaPrecioRepository listaPrecioRepo,
                            ListaPrecioArticuloRepository listaPrecioArticuloRepo) {
         this.puntoVentaRepo = puntoVentaRepo;
         this.clienteRepo = clienteRepo;
         this.condicionIvaRepo = condicionIvaRepo;
         this.tipoMonedaRepo = tipoMonedaRepo;
+        this.listaPrecioRepo = listaPrecioRepo;
         this.listaPrecioArticuloRepo = listaPrecioArticuloRepo;
     }
 
@@ -40,7 +44,7 @@ public class CatalogoService {
 
     public List<OpcionDTO> condicionesIva() {
         return condicionIvaRepo.findAll().stream()
-                .map(c -> new OpcionDTO(c.getId(), c.getDenominacion(), null)).toList();
+                .map(c -> new OpcionDTO(c.getId(), c.getDenominacion(), (double) c.getCodigoAfip())).toList();
     }
 
     public List<OpcionDTO> tiposMoneda() {
@@ -49,11 +53,23 @@ public class CatalogoService {
                         t.getCodigoAfip())).toList();
     }
 
+    public List<OpcionDTO> listasPrecio() {
+        return listaPrecioRepo.findAll(Sort.by("denominacion")).stream()
+                .map(l -> new OpcionDTO(l.getId(), l.getDenominacion(), null)).toList();
+    }
+
     public List<OpcionDTO> listaPrecioArticulos() {
-        return listaPrecioArticuloRepo.findAllByOrderByArticulo_DenominacionAsc().stream()
+        return listaPrecioArticulos(null);
+    }
+
+    public List<OpcionDTO> listaPrecioArticulos(Long listaPrecioId) {
+        var articulos = listaPrecioId == null
+                ? listaPrecioArticuloRepo.findAllByOrderByArticulo_DenominacionAsc()
+                : listaPrecioArticuloRepo.findByListaPrecio_IdOrderByArticulo_DenominacionAsc(listaPrecioId);
+        return articulos.stream()
                 .map(l -> new OpcionDTO(l.getId(),
                         l.getArticulo().getCodigo() + " - " + l.getArticulo().getDenominacion()
                                 + " [" + l.getListaPrecio().getDenominacion() + "]",
-                        l.getPrecioVenta())).toList();
+                        l.getPrecioVenta(), null, l.getListaPrecio().getId())).toList();
     }
 }

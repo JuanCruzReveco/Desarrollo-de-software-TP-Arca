@@ -67,7 +67,7 @@ public class DatosDePrueba {
         puntoVenta = puntoVentaRepo.save(PuntoVenta.builder().numero(1).descripcion("Sucursal Central").build());
         moneda = tipoMonedaRepo.save(TipoMoneda.builder().codigoAfip("PES").denominacion("Pesos").simbolo("$").build());
         condicionIva = condicionIvaRepo.save(CondicionIva.builder().codigoAfip(1).denominacion("IVA Responsable Inscripto").build());
-        cliente = clienteRepo.save(Cliente.builder().cuitCuil("30-71234567-8").denominacion("Empresa Tech S.A.")
+        cliente = clienteRepo.save(Cliente.builder().cuitCuil("30-00000000-7").denominacion("Cliente de prueba")
                 .contacto(Contacto.builder().email("a@b.com").build())
                 .domicilio(Domicilio.builder().nombreCalle("Calle").numeroCalle("1").build()).build());
 

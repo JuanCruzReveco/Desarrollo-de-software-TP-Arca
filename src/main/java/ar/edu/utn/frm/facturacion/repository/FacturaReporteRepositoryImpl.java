@@ -33,7 +33,7 @@ public class FacturaReporteRepositoryImpl implements FacturaReporteRepository {
             "SELECT new ar.edu.utn.frm.facturacion.dto.FacturaReporteDTO(" +
             "   f.id, f.numero, f.fechaEmision, " +
             "   COALESCE(c.denominacion, 'Consumidor Final'), " +
-            "   ci.denominacion, pv.descripcion, f.importeTotal, COUNT(d), f.estado, tm.codigoAfip" +
+            "   ci.denominacion, pv.descripcion, f.importeTotal, COUNT(d), f.estado, tm.codigoAfip, f.resultadoAfip" +
             ") " +
             "FROM FacturaVenta f " +
             "LEFT JOIN f.cliente c " +
@@ -63,7 +63,7 @@ public class FacturaReporteRepositoryImpl implements FacturaReporteRepository {
         }
 
         jpql.append("GROUP BY f.id, f.numero, f.fechaEmision, c.denominacion, ci.denominacion, ")
-            .append("pv.descripcion, f.importeTotal, f.estado, tm.codigoAfip ")
+            .append("pv.descripcion, f.importeTotal, f.estado, tm.codigoAfip, f.resultadoAfip ")
             .append("ORDER BY f.fechaEmision DESC, f.id DESC");
 
         TypedQuery<FacturaReporteDTO> query = em.createQuery(jpql.toString(), FacturaReporteDTO.class);

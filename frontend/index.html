@@ -20,8 +20,8 @@
     <section class="card">
       <h2>Buscar comprobantes</h2>
       <form id="form-filtros" class="grid grid--4">
-        <label>Desde <input type="date" name="fechaDesde"></label>
-        <label>Hasta <input type="date" name="fechaHasta"></label>
+        <label>Desde (DD/MM/AAAA) <input type="text" name="fechaDesde" inputmode="numeric" placeholder="DD/MM/AAAA" maxlength="10" autocomplete="off"></label>
+        <label>Hasta (DD/MM/AAAA) <input type="text" name="fechaHasta" inputmode="numeric" placeholder="DD/MM/AAAA" maxlength="10" autocomplete="off" aria-describedby="fecha-hasta-maximo"><small id="fecha-hasta-maximo" class="ayuda-campo"></small></label>
         <label>Estado
           <select name="estado">
             <option value="">Todos</option>
@@ -47,18 +47,37 @@
       <form id="form-item" hidden></form>
       <form id="form-factura">
         <input type="hidden" name="facturaId" value="">
-        <div class="grid grid--4">
-          <label>Punto de venta <select name="puntoVentaId" required></select></label>
-          <label>Cliente <select name="clienteId"><option value="">Consumidor Final</option></select></label>
-          <label>Condición IVA <select name="condicionIvaId" required></select></label>
-          <label>Moneda <select name="tipoMonedaId" required></select></label>
-          <label>Fecha de emisión <input type="date" name="fechaEmision"></label>
-          <label class="span-3">Observaciones <input type="text" name="observaciones" maxlength="500"></label>
-        </div>
+        <fieldset class="datos-factura">
+          <legend>Cliente y datos de factura</legend>
+          <div class="grid grid--4">
+            <label>Punto de venta <select name="puntoVentaId" required></select></label>
+            <div class="campo-explorer">
+              <span class="etiqueta-campo">Cliente</span>
+              <input type="hidden" name="clienteId" value="">
+              <output id="cliente-elegido" aria-live="polite">Consumidor Final</output>
+              <div class="acciones-campo">
+                <button type="button" id="btn-buscar-cliente" class="btn" aria-haspopup="dialog" aria-controls="dialogo-clientes">Explorar clientes</button>
+                <button type="button" id="btn-consumidor-final" class="btn btn--sm">Consumidor Final</button>
+              </div>
+            </div>
+            <label>Condición IVA <select name="condicionIvaId" required></select></label>
+            <label>Moneda <select name="tipoMonedaId" required></select></label>
+            <div class="span-4" role="status" aria-live="polite">Tipo previsto: <strong id="tipo-comprobante-previsto">Consultando configuración fiscal…</strong></div>
+            <label>Fecha de emisión (DD/MM/AAAA) <input type="text" name="fechaEmision" inputmode="numeric" placeholder="DD/MM/AAAA" maxlength="10" autocomplete="off" required></label>
+            <label class="span-3">Observaciones <input type="text" name="observaciones" maxlength="500"></label>
+          </div>
+        </fieldset>
 
         <h3>Renglones</h3>
         <div class="grid grid--item">
-          <label>Artículo (lista de precios) <select id="item-articulo" form="form-item"></select></label>
+          <label>Lista de precios <select id="lista-precio" form="form-item"></select></label>
+          <div class="campo-explorer">
+            <span class="etiqueta-campo">Artículo</span>
+            <input type="hidden" id="item-articulo" form="form-item" value="">
+            <output id="item-articulo-elegido" aria-live="polite">Sin artículo seleccionado</output>
+            <small id="item-precio"></small>
+            <button type="button" id="btn-buscar-articulo" class="btn" aria-haspopup="dialog" aria-controls="dialogo-articulos">Explorar artículos</button>
+          </div>
           <label>Cantidad <input type="number" id="item-cantidad" form="form-item" min="0.01" step="0.01" value="1"></label>
           <label>Bonif. % <input type="number" id="item-bonif" form="form-item" min="0" max="100" step="0.5" value="0"></label>
           <label>Descripción (opcional) <input type="text" id="item-descripcion" form="form-item" maxlength="255"></label>
@@ -98,8 +117,55 @@
         <tbody></tbody>
       </table>
       <p id="sin-resultados" class="vacio" hidden>No hay comprobantes para los filtros seleccionados.</p>
+      <div class="acciones explorer-paginacion">
+        <button type="button" id="facturas-anterior" class="btn">Anterior</button>
+        <span id="pagina-facturas" aria-live="polite"></span>
+        <button type="button" id="facturas-siguiente" class="btn">Siguiente</button>
+      </div>
     </section>
   </main>
+
+  <dialog id="dialogo-clientes" class="dialogo-explorer" aria-labelledby="titulo-clientes">
+    <h2 id="titulo-clientes">Explorar clientes</h2>
+    <label>Buscar por nombre o CUIT <input type="search" id="buscar-cliente" autocomplete="off"></label>
+    <div class="explorer-scroll">
+      <table class="tabla"><thead><tr><th>Cliente</th><th>Acción</th></tr></thead><tbody id="resultados-clientes"></tbody></table>
+    </div>
+    <div class="acciones explorer-paginacion">
+      <button type="button" id="clientes-anterior" class="btn">Anterior</button>
+      <span id="pagina-clientes" aria-live="polite"></span>
+      <button type="button" id="clientes-siguiente" class="btn">Siguiente</button>
+      <span class="spacer"></span>
+      <button type="button" id="cerrar-clientes" class="btn">Cerrar</button>
+    </div>
+  </dialog>
+
+  <dialog id="dialogo-articulos" class="dialogo-explorer" aria-labelledby="titulo-articulos">
+    <h2 id="titulo-articulos">Explorar artículos</h2>
+    <p id="articulos-lista-actual" class="explorer-contexto"></p>
+    <label>Buscar por código o descripción <input type="search" id="buscar-articulo" autocomplete="off"></label>
+    <div class="explorer-scroll">
+      <table class="tabla"><thead><tr><th>Artículo</th><th class="num">Precio</th><th>Acción</th></tr></thead><tbody id="resultados-articulos"></tbody></table>
+    </div>
+    <div class="acciones explorer-paginacion">
+      <button type="button" id="articulos-anterior" class="btn">Anterior</button>
+      <span id="pagina-articulos" aria-live="polite"></span>
+      <button type="button" id="articulos-siguiente" class="btn">Siguiente</button>
+      <span class="spacer"></span>
+      <button type="button" id="cerrar-articulos" class="btn">Cerrar</button>
+    </div>
+  </dialog>
+
+  <dialog id="dialogo-anulacion" class="dialogo-explorer" aria-labelledby="titulo-anulacion">
+    <h2 id="titulo-anulacion">Anular factura</h2>
+    <label>Motivo de la anulación (opcional)
+      <input type="text" id="motivo-anulacion" maxlength="255" autocomplete="off">
+    </label>
+    <div class="acciones">
+      <button type="button" id="cancelar-anulacion" class="btn">Cancelar</button>
+      <button type="button" id="confirmar-anulacion" class="btn btn--peligro">Confirmar anulación</button>
+    </div>
+  </dialog>
 
   <script type="module" src="dist/app.js"></script>
 </body>

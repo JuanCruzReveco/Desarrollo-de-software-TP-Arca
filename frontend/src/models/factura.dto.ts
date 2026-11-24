@@ -19,6 +19,7 @@ export interface FacturaReporteDTO {
   cantidadItems: number;
   estado: EstadoFactura;
   codigoMoneda?: string;
+  autorizacionArca: boolean;
 }
 
 /** Espejo de FacturaDetalleResponseDTO (renglón dentro de FacturaDetalladaDTO). */
@@ -54,6 +55,7 @@ export interface FacturaDetalladaDTO {
   importeSaldo: number;
   cae: string | null;
   caeFechaVencimiento: string | null;
+  autorizacionArca: boolean;
   fechaAnulacion: string | null;
   observaciones: string | null;
   detalles: FacturaDetalleResponseDTO[];
@@ -98,6 +100,13 @@ export interface OpcionDTO {
   etiqueta: string;
   valor: number | null;
   codigoMoneda?: string;
+  listaPrecioId?: number | null;
+}
+
+/** Configuración fiscal pública; no contiene CUIT ni credenciales. */
+export interface ConfiguracionFiscalDTO {
+  emisorCondicionIva: number | null;
+  tiposPermitidos: number[];
 }
 
 /** Espejo de ProblemDetail (RFC 7807) que devuelve el backend ante errores. */

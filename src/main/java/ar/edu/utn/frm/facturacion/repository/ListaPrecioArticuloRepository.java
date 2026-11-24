@@ -10,4 +10,7 @@ public interface ListaPrecioArticuloRepository extends JpaRepository<ListaPrecio
 
     @EntityGraph(attributePaths = {"articulo", "listaPrecio"})
     List<ListaPrecioArticulo> findAllByOrderByArticulo_DenominacionAsc();
+
+    @EntityGraph(attributePaths = {"articulo", "listaPrecio"})
+    List<ListaPrecioArticulo> findByListaPrecio_IdOrderByArticulo_DenominacionAsc(Long listaPrecioId);
 }

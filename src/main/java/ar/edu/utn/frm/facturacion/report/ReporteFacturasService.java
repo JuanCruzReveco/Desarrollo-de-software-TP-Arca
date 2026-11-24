@@ -118,7 +118,7 @@ public class ReporteFacturasService {
         return c;
     }
 
-    private static BaseFont fuentePdf() throws DocumentException {
+    static BaseFont fuentePdf() throws DocumentException {
         String recurso = "/fonts/NotoSansCJKsc-Regular.otf";
         try (InputStream stream = ReporteFacturasService.class.getResourceAsStream(recurso)) {
             if (stream == null) throw new IOException("No se encontró la fuente PDF incluida");
@@ -129,7 +129,7 @@ public class ReporteFacturasService {
         }
     }
 
-    private static void validarTextoPdf(String texto, BaseFont fuente) {
+    static void validarTextoPdf(String texto, BaseFont fuente) {
         if (texto == null) return;
         texto.codePoints().forEach(codigo -> {
             if (codigo != '\n' && codigo != '\r' && codigo != '\t' && !fuente.charExists(codigo)) {

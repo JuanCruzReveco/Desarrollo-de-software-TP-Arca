@@ -44,7 +44,7 @@ public class CatalogoService {
 
     public List<OpcionDTO> condicionesIva() {
         return condicionIvaRepo.findAll().stream()
-                .map(c -> new OpcionDTO(c.getId(), c.getDenominacion(), null)).toList();
+                .map(c -> new OpcionDTO(c.getId(), c.getDenominacion(), (double) c.getCodigoAfip())).toList();
     }
 
     public List<OpcionDTO> tiposMoneda() {

@@ -34,7 +34,7 @@ class ConcurrentFacturaTest {
         UsuarioActual.clear();
     }
     FacturaRequestDTO request() {
-        return FacturaRequestDTO.builder().puntoVentaId(datos.getPuntoVenta().getId())
+        return FacturaRequestDTO.builder().clienteId(datos.getCliente().getId()).puntoVentaId(datos.getPuntoVenta().getId())
             .condicionIvaId(datos.getCondicionIva().getId()).tipoMonedaId(datos.getMoneda().getId())
             .detalles(List.of(FacturaDetalleRequestDTO.builder()
                 .listaPrecioArticuloId(datos.getLpaNotebook().getId()).cantidad(1.0).build())).build();
@@ -74,7 +74,18 @@ class ConcurrentFacturaTest {
         assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
         start.countDown();
         List<Long> numeros = new ArrayList<>();
-        for (Future<FacturaReporteDTO> future : futures) numeros.add(future.get(10, TimeUnit.SECONDS).getNumeroFactura());
+        List<Long> paraReintentar = new ArrayList<>();
+        for (int i = 0; i < futures.size(); i++) {
+            try { numeros.add(futures.get(i).get(10, TimeUnit.SECONDS).getNumeroFactura()); }
+            catch (ExecutionException e) {
+                assertThat(e.getCause()).isInstanceOf(ReglaNegocioException.class);
+                paraReintentar.add(ids.get(i));
+            }
+        }
+        assertThat(numeros).isNotEmpty();
+        for (Long id : paraReintentar) {
+            numeros.add(service.cambiarEstado(id, new CambioEstadoRequestDTO("EMITIDA", null)).getNumeroFactura());
+        }
         assertThat(numeros).doesNotHaveDuplicates().hasSize(cantidad).contains(1L, (long) cantidad);
     }
     @ParameterizedTest @ValueSource(strings = {"actualizar", "eliminar"})
@@ -84,6 +95,7 @@ class ConcurrentFacturaTest {
         new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
             service.cambiarEstado(id, new CambioEstadoRequestDTO("EMITIDA", null));
             em.flush();
+            em.find(FacturaVenta.class, id, LockModeType.PESSIMISTIC_WRITE);
             CountDownLatch started = new CountDownLatch(1);
             Future<Void> future = ejecutar(() -> {
                 if (operacion.equals("actualizar")) service.actualizar(id, request());

@@ -8,6 +8,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDate;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -17,7 +18,7 @@ import java.util.List;
  */
 @Entity
 @Table(name = "factura_venta",
-       uniqueConstraints = @UniqueConstraint(columnNames = {"punto_venta_id", "numero"}))
+       uniqueConstraints = @UniqueConstraint(columnNames = {"punto_venta_id", "tipo_comprobante_arca", "numero"}))
 @Getter
 @Setter
 @NoArgsConstructor
@@ -60,6 +61,11 @@ public class FacturaVenta extends AuditoriaApp {
     private LocalDate caeFechaVencimiento;
     private String resultadoAfip;
     private String motivoRechazo;
+    /** Reserva durable para reconciliar un resultado incierto sin repetir a ciegas. */
+    private Instant emisionUltimoIntento;
+    private Integer tipoComprobanteArca;
+    @Column(length = 36)
+    private String emisionIntentoId;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)

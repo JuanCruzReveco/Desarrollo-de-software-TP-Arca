@@ -1,5 +1,7 @@
 # Correcciones posteriores a la devolución del profesor — 19/11/2026
 
+**Archivo histórico de la corrección de interfaz del 19/11/2026.** Describe la versión anterior a la integración WSAA/WSFEv1 y no debe utilizarse como evidencia de una autorización vigente. Para la defensa actual, consultar el README y ejecutar una prueba de homologación con credenciales nuevas del grupo.
+
 Este documento complementa los informes de etapas 1 a 5. El informe [etapa-5.md](etapa-5.md) conserva la evidencia de la entrega anterior; los números y capturas de ese informe no describen por sí solos esta versión corregida.
 
 ## Pedido y resultado
@@ -31,7 +33,7 @@ El PDF individual y el reporte de facturas son recursos distintos: `/api/factura
 
 - Backend: `gradlew test` con perfil de pruebas H2: **87/87 pruebas aprobadas**, 18 suites, sin fallos. Las pruebas nuevas cubren el PDF con datos de factura, fecha día primero, CAE/vencimiento, varias páginas y reglas HTTP, además del catálogo de listas y del filtro de artículos.
 - Frontend: `npm test`: **51/51 pruebas aprobadas** con TypeScript y jsdom. Se añadieron casos de fechas, exploradores, paginación, selección de lista y acción Imprimir.
-- Se generaron muestras en [factura-demo.pdf](muestras/factura-demo.pdf) y [factura-demo-multipagina.pdf](muestras/factura-demo-multipagina.pdf); la segunda tiene tres páginas. Se revisaron sus páginas renderizadas y el texto extraído.
+- Las muestras locales de factura de esta revisión se retiraron porque sus valores no provienen de una autorización de ARCA. Para la defensa actual, generar un PDF únicamente después de una aprobación real en homologación.
 
 Estas pruebas no sustituyen un recorrido integral **backend + navegador real** de esta versión. La suite backend corrió sobre H2; no demuestra el comportamiento en PostgreSQL. Tampoco hay autorización fiscal real: el CAE es **simulado** y el PDF declara que el comprobante académico no tiene validez fiscal.
 

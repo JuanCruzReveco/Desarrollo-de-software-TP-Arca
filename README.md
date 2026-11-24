@@ -1,10 +1,10 @@
 # Sistema de Facturación ARCA
 
-Trabajo práctico integrador **individual** de Desarrollo de Software (UTN FRM, 2026): sistema de facturación con backend Java/Spring Boot y frontend HTML/CSS/TypeScript. Permite crear y editar borradores, emitir y anular facturas, consultar por filtros y exportar reportes.
+Trabajo práctico integrador de Desarrollo de Software (UTN FRM, 2026): sistema de facturación con backend Java/Spring Boot y frontend HTML/CSS/TypeScript. Permite crear y editar borradores, solicitar autorización de facturas en homologación, consultar por filtros y exportar reportes.
 
-> **Declaración de origen y uso de herramientas.** La base de este repositorio proviene del **kit de nivelación publicado por la cátedra** (`arca-spirng-main`), incorporado completo en el commit inicial. Sobre esa base se agregaron pruebas de persistencia y se corrigieron problemas de interacción del frontend. Las correcciones posteriores solicitadas por el profesor se documentan en [correcciones-profesor.md](docs/correcciones-profesor.md). Para los exploradores y la impresión se usó `TP 6 Grupal  3.zip` como **referencia de patrón de interfaz**, sin trasladar integración fiscal real. Se utilizaron asistentes de IA (Claude y Codex) para preparar, revisar y verificar la entrega. Los resultados citados distinguen la evidencia propia de la heredada del kit.
+> **Declaración de origen y uso de herramientas.** La base de este repositorio proviene del **kit de nivelación publicado por la cátedra** (`arca-spirng-main`), incorporado completo en el commit inicial. Sobre esa base se agregaron pruebas de persistencia y se corrigieron problemas de interacción del frontend. Las correcciones posteriores solicitadas por el profesor se documentan en [correcciones-profesor.md](docs/correcciones-profesor.md). Para los exploradores y la impresión se usó un trabajo de referencia como patrón de interfaz. La integración de homologación se desarrolló por separado, sin reutilizar credenciales ajenas. Se utilizaron asistentes de IA (Claude y Codex) para preparar, revisar y verificar la entrega. Los resultados citados distinguen la evidencia propia de la heredada del kit.
 
-El backend y el frontend se ejecutan por separado. El **CAE es simulado**: no se consultan servicios fiscales de ARCA. El encabezado **`X-Usuario` identifica auditoría, sin autenticar** a quien realiza la solicitud.
+El backend y el frontend se ejecutan por separado. La emisión se conecta con **WSAA y WSFEv1 de ARCA en homologación** y solo guarda un CAE tras una aprobación del servicio. El 23/11/2026 se verificó una factura C autorizada en homologación; los pasos y el alcance están en [homologacion-arca.md](docs/homologacion-arca.md). El [certificado público](docs/certificados/homologacion-emisor.pem) se incluye por decisión de su titular; la clave privada permanece fuera del repositorio. El encabezado **`X-Usuario` identifica auditoría, sin autenticar** a quien realiza la solicitud.
 
 ## Contenido
 
@@ -13,6 +13,7 @@ El backend y el frontend se ejecutan por separado. El **CAE es simulado**: no se
 - [Tecnologías y requisitos](#tecnologías-y-requisitos)
 - [Puesta en marcha](#puesta-en-marcha)
 - [Configuración y PostgreSQL](#configuración-y-postgresql)
+- [Integración con ARCA en homologación](docs/homologacion-arca.md)
 - [API y reglas de negocio](#api-y-reglas-de-negocio)
 - [Reportes](#reportes)
 - [Pruebas y verificación](#pruebas-y-verificación)
@@ -163,7 +164,7 @@ En Linux/macOS:
 
 El backend escucha en `http://localhost:8080`. Comprobarlo abriendo `http://localhost:8080/api/facturas`. La raíz del backend no sirve la interfaz del frontend.
 
-`DataLoader` crea usuarios, catálogos, clientes y seis facturas de ejemplo: tres emitidas, una anulada y dos borradores. Omite toda la carga si ya existe al menos un usuario; no completa automáticamente catálogos parcialmente cargados. Está deshabilitado en el perfil `test`.
+`DataLoader` crea usuarios, catálogos, clientes y seis **borradores** de ejemplo. No crea facturas emitidas ni CAE al arrancar. Omite toda la carga si ya existe al menos un usuario; no completa automáticamente catálogos parcialmente cargados. Está deshabilitado en el perfil `test`.
 
 #### Acceder a la consola de H2
 
@@ -211,8 +212,8 @@ Abrir `http://localhost:5173`. `npm run dev` compila TypeScript una vez e inicia
 1. Consultar facturas, aplicar filtros con fecha visible **DD/MM/AAAA** y recorrer páginas de diez resultados.
 2. Crear una factura: buscar y seleccionar el cliente en el explorador (o elegir Consumidor Final), seleccionar una lista de precios, buscar el artículo dentro de esa lista y agregar al menos un renglón.
 3. Editar el borrador y comprobar los importes calculados por el servidor.
-4. Emitirlo para asignar número y CAE simulado.
-5. Pulsar **Imprimir** para abrir el PDF de esa factura, con CAE simulado, vencimiento y páginas numeradas. También se puede descargar el reporte general o anular la factura emitida.
+4. Con credenciales propias configuradas, emitirlo: el backend consulta a WSFEv1 y guarda número fiscal y CAE solo si ARCA aprueba.
+5. Pulsar **Imprimir** para abrir el PDF de la factura autorizada, con CAE, vencimiento y páginas numeradas. También se puede descargar el reporte general. Una factura con CAE no puede anularse mediante el cambio de estado local; requiere una nota de crédito o débito ante ARCA, función aún no implementada.
 
 Para recorrer la API sin interfaz, utilizar [requests.http](requests.http) con un cliente compatible. Sus IDs son ejemplos: reemplazarlos por los obtenidos de los catálogos y de la respuesta de creación si la base fue modificada.
 
@@ -300,13 +301,13 @@ Los catálogos se consultan mediante `GET /api/catalogos/` seguido de `puntos-ve
 ### Estados, importes y auditoría
 
 ```text
-BORRADOR ──emitir──> EMITIDA ──anular──> ANULADA
+BORRADOR ──solicitar CAE──> EMITIDA (solo tras aprobación de ARCA)
     │
     ├── editar cabecera y renglones
     └── eliminar físicamente
 ```
 
-La emisión exige detalles, asigna el siguiente número del punto de venta y genera un CAE simulado de 14 dígitos con vencimiento a diez días. La anulación registra fecha y baja lógica. No hay regreso a borrador.
+La emisión exige detalles y credenciales propias de homologación. El backend consulta el último número autorizado para el punto de venta y tipo de comprobante, reserva el siguiente y llama a `FECAESolicitar`. Solo guarda el número fiscal, CAE y vencimiento y pasa a `EMITIDA` ante una aprobación de ARCA. Si ARCA rechaza, conserva el borrador con el motivo; ante un resultado incierto, consulta el comprobante antes de reintentar. La anulación local de una factura autorizada está bloqueada porque no equivale a una anulación fiscal.
 
 Las escrituras son transaccionales. Edición, emisión, anulación y eliminación bloquean la cabecera; emitir también bloquea el punto de venta para coordinar su numeración. La cascada y `orphanRemoval` administran los detalles al reemplazarlos.
 
@@ -328,7 +329,7 @@ La interfaz bloquea acciones durante un guardado, conserva datos ante errores y 
 
 ## Reportes
 
-El **reporte general** utiliza los mismos DTOs y filtros del listado y se genera en memoria como respuesta HTTP. El **comprobante individual** usa el detalle de una factura emitida o anulada, incluye datos del cliente, renglones, importes, número, CAE simulado y vencimiento, y marca cada página `Página X de Y`. Ambos se generan en memoria; no se guardan automáticamente en el servidor.
+El **reporte general** utiliza los mismos DTOs y filtros del listado y se genera en memoria como respuesta HTTP. El **comprobante individual** exige una autorización comprobada en homologación; incluye datos del cliente, renglones, importes, número fiscal, CAE y vencimiento, y marca cada página `Página X de Y`. Indica que es una prueba sin validez fiscal. Ambos se generan en memoria; no se guardan automáticamente en el servidor.
 
 | Formato | Implementación |
 |---|---|
@@ -371,7 +372,7 @@ npm ci
 npm test
 ```
 
-`npm test` compila TypeScript y ejecuta `test/app.test.mjs` con jsdom y módulos VM. La suite actual pasó **51/51** pruebas, incluidas las de exploradores, selección de lista, fechas y acción Imprimir. Prueba DOM y cliente HTTP simulado; no equivale a una sesión completa en un navegador real. `npm run build` comprueba solo la compilación.
+`npm test` compila TypeScript y ejecuta `test/app.test.mjs` con jsdom y módulos VM. La suite actual pasó **57/57** pruebas, incluidas las de exploradores, selección de lista, fechas, emisión autorizada y acción Imprimir. Prueba DOM y cliente HTTP simulado; la emisión externa de homologación se registra por separado en [homologacion-arca.md](docs/homologacion-arca.md). `npm run build` comprueba solo la compilación.
 
 ### Evidencia de verificación
 
@@ -391,12 +392,12 @@ La tabla [docs/correspondencia-consignas.md](docs/correspondencia-consignas.md) 
 - Este README, adaptado (se retiró lo que describía material que no se incluye) y con esta declaración.
 - Pruebas propias de persistencia, `PersistenciaModeloTest` (14 pruebas): el kit no probaba restricciones de unicidad y nulidad con datos que las violen, ni que eliminar un borrador conserve los catálogos, ni la clave foránea del detalle. Se comprobó, rompiendo a propósito el código de producción, que estas pruebas fallan cuando el mapeo es incorrecto (detalle en [docs/etapa-1.md](docs/etapa-1.md)).
 - Correcciones del frontend: los campos del próximo renglón se asociaron a un formulario separado para que un renglón incompleto no invalide el guardado de una factura que ya tiene detalles; las acciones de emitir, anular y eliminar se bloquean por factura mientras esperan respuesta para evitar peticiones duplicadas. Se agregaron cuatro pruebas de regresión en `frontend/test/app.test.mjs`.
-- Correcciones posteriores a la devolución del profesor: exploradores de cliente y artículo con búsqueda y paginación de interfaz; selección explícita de lista de precios; fechas visibles en día/mes/año; PDF individual con CAE simulado, vencimiento y páginas numeradas. `TP 6 Grupal  3.zip` se consultó para el patrón de interacción; el comprobante sigue siendo académico y no invoca servicios fiscales.
+- Correcciones posteriores a la devolución del profesor: exploradores de cliente y artículo con búsqueda y paginación de interfaz; selección explícita de lista de precios; fechas visibles en día/mes/año; PDF individual con CAE, vencimiento y páginas numeradas. El trabajo de referencia se consultó para el patrón de interacción. Después se reemplazó la emisión académica por una integración propia con los servicios de homologación de ARCA.
 - Los informes `docs/etapa-N.md` y la verificación de las cinco etapas.
 
 **Uso de IA.** Se utilizó Claude (Anthropic) para armar el repositorio, ejecutar comprobaciones, escribir las pruebas propias de persistencia y redactar borradores de los informes. Se utilizó Codex (OpenAI) para revisar la entrega, corregir las fallas de interacción, implementar las correcciones pedidas por el profesor, agregar pruebas y actualizar la documentación. La verificación anterior a esta devolución fue **76/76** en backend H2 y **34/34** en frontend jsdom; los resultados posteriores se detallan en [correcciones-profesor.md](docs/correcciones-profesor.md). El código heredado y los cambios propios deben ser comprendidos y explicables por el estudiante en la defensa. Los commits anteriores hechos con asistencia de Claude llevan la línea `Co-Authored-By`.
 
-**Alcance de la verificación.** Las pruebas se ejecutaron con **H2**. PostgreSQL 16 no se probó en este equipo (no hay Docker instalado); el kit documenta una ejecución propia sobre PostgreSQL, pero ese resultado no se reproduce aquí y no debe tomarse como evidencia de este repositorio. El PDF se revisa visualmente según se indica en [docs/etapa-2.md](docs/etapa-2.md).
+**Alcance de la verificación.** El 23/11/2026 la suite completa pasó **98/98** pruebas de backend con **H2** y se verificó una emisión real en homologación. PostgreSQL 16 no se probó en este equipo (no hay Docker instalado); el kit documenta una ejecución propia sobre PostgreSQL, pero ese resultado no se reproduce aquí y no debe tomarse como evidencia de este repositorio. El PDF se revisa visualmente según se indica en [docs/etapa-2.md](docs/etapa-2.md).
 
 **Enunciado.** El enunciado vigente es el publicado en el Campus Virtual (curso Desarrollo de Software, sección del TP ARCA). El documento no se incluye en el repositorio.
 
@@ -421,4 +422,4 @@ java -Duser.timezone=America/Argentina/Buenos_Aires -jar build/libs/facturacion-
 
 Esto no cambia la zona horaria del sistema operativo.
 
-La implementación no incluye autenticación/autorización, integración fiscal real, registro de pagos, CRUD de catálogos, paginación **de servidor**, conversión de moneda ni migraciones versionadas. Los campos de cobrado/saldo pertenecen al modelo, pero no hay un flujo HTTP de cobros. El esquema se administra mediante Hibernate (`ddl-auto=update`), los reportes y comprobantes PDF se materializan en memoria y la configuración distribuida es de desarrollo.
+La implementación no incluye autenticación/autorización de usuarios, emisión fiscal en producción, registro de pagos, CRUD de catálogos, paginación **de servidor**, conversión de moneda ni migraciones versionadas. Los campos de cobrado/saldo pertenecen al modelo, pero no hay un flujo HTTP de cobros. El esquema se administra mediante Hibernate (`ddl-auto=update`), los reportes y comprobantes PDF se materializan en memoria y la configuración distribuida es de desarrollo.

@@ -70,15 +70,15 @@ public class DataLoader implements CommandLineRunner {
         // 1) Usuario de sistema: lo necesita la auditoría antes que nada
         Usuario sistema = usuarioRepo.save(Usuario.builder()
                 .usuario(props.usuarioPorDefecto()).clave("secreto").nombre("Sistema").apellido("Facturación").build());
-        Usuario alberto = usuarioRepo.save(Usuario.builder()
-                .usuario("acortez").clave("secreto").nombre("Alberto").apellido("Cortez").build());
+        Usuario operadorDemo = usuarioRepo.save(Usuario.builder()
+                .usuario("operador-demo").clave("demo").nombre("Operador").apellido("Demo").build());
         UsuarioActual.set(sistema);
         try {
             // 2) Catálogos
             PuntoVenta pv1 = puntoVentaRepo.save(PuntoVenta.builder().numero(1).descripcion("Sucursal Central")
-                    .tipoEmision("CAE").domicilioComercial("Av. San Martín 1200, Mendoza").build());
+                    .tipoEmision("CAE").domicilioComercial("Domicilio de prueba 1").build());
             PuntoVenta pv2 = puntoVentaRepo.save(PuntoVenta.builder().numero(2).descripcion("Sucursal Godoy Cruz")
-                    .tipoEmision("CAE").domicilioComercial("Av. Hipólito Yrigoyen 450, Godoy Cruz").build());
+                    .tipoEmision("CAE").domicilioComercial("Domicilio de prueba 2").build());
 
             TipoMoneda pesos = tipoMonedaRepo.save(TipoMoneda.builder().codigoAfip("PES").denominacion("Pesos Argentinos").simbolo("$").build());
             tipoMonedaRepo.save(TipoMoneda.builder().codigoAfip("DOL").denominacion("Dólar Estadounidense").simbolo("U$S").build());
@@ -111,39 +111,35 @@ public class DataLoader implements CommandLineRunner {
             lpaRepo.save(ListaPrecioArticulo.builder().listaPrecio(mayorista).articulo(mouse).precioVenta(15900).build());
 
             // 3) Clientes: Contacto y Domicilio se insertan en cascada desde Cliente
-            Cliente tech = clienteRepo.save(Cliente.builder().cuitCuil("30-71234567-8").denominacion("Empresa Tech S.A.")
-                    .contacto(Contacto.builder().email("compras@empresatech.com.ar").telefono("261-4201234").celular("261-5551234").build())
-                    .domicilio(Domicilio.builder().nombreCalle("Belgrano").numeroCalle("1450").build()).build());
-            Cliente utn = clienteRepo.save(Cliente.builder().cuitCuil("30-54667001-2").denominacion("UTN Facultad Regional Mendoza")
-                    .contacto(Contacto.builder().email("compras@frm.utn.edu.ar").telefono("261-5244500").celular(null).build())
-                    .domicilio(Domicilio.builder().nombreCalle("Rodríguez").numeroCalle("273").build()).build());
-            Cliente juan = clienteRepo.save(Cliente.builder().cuitCuil("20-30111222-3").denominacion("Juan Pérez")
-                    .contacto(Contacto.builder().email("juanperez@gmail.com").telefono(null).celular("261-6009876").build())
-                    .domicilio(Domicilio.builder().nombreCalle("Las Heras").numeroCalle("88").build()).build());
+            // Datos deliberadamente no verificables: deben reemplazarse antes de una emisión WSFEv1.
+            Cliente tech = clienteRepo.save(Cliente.builder().cuitCuil("00-00000000-0").denominacion("Cliente de demostración A (sin validar)")
+                    .contacto(Contacto.builder().email("demo-a@example.invalid").build())
+                    .domicilio(Domicilio.builder().nombreCalle("Calle de prueba").numeroCalle("1").build()).build());
+            Cliente utn = clienteRepo.save(Cliente.builder().cuitCuil("00-00000000-0").denominacion("Cliente de demostración B (sin validar)")
+                    .contacto(Contacto.builder().email("demo-b@example.invalid").build())
+                    .domicilio(Domicilio.builder().nombreCalle("Calle de prueba").numeroCalle("2").build()).build());
+            Cliente juan = clienteRepo.save(Cliente.builder().cuitCuil("00-00000000-0").denominacion("Cliente de demostración C (sin validar)")
+                    .contacto(Contacto.builder().email("demo-c@example.invalid").build())
+                    .domicilio(Domicilio.builder().nombreCalle("Calle de prueba").numeroCalle("3").build()).build());
 
-            // 4) Facturas: se crean por el servicio (mismo camino que el POST) y luego se emiten/anulan
-            long f1 = crear(null, cf, pesos, pv1, LocalDate.of(2026, 3, 15), "Venta mostrador",
+            // 4) Facturas de ejemplo: solo borradores. Ningún CAE se inventa al arrancar.
+            long f1 = crear(null, cf, pesos, pv1, LocalDate.now(), "Venta mostrador",
                     item(lpMouse, 1, 0), item(lpTeclado, 1, 0));
-            emitir(f1);
 
-            long f2 = crear(tech, ri, pesos, pv1, LocalDate.of(2026, 3, 20), "Orden de compra OC-2026-118",
+            long f2 = crear(null, cf, pesos, pv1, LocalDate.now(), "Venta de demostración; Consumidor Final",
                     item(lpNotebook, 2, 5), item(lpMouse, 2, 0), item(lpTeclado, 2, 0), item(lpResma, 10, 10), item(lpLapicera, 5, 0));
-            emitir(f2);
 
-            long f3 = crear(utn, ri, pesos, pv2, LocalDate.of(2026, 4, 2), "Insumos de laboratorio",
+            long f3 = crear(null, cf, pesos, pv2, LocalDate.now(), "Venta de demostración; Consumidor Final",
                     item(lpResma, 20, 15), item(lpLapicera, 10, 0));
-            emitir(f3);
-            anular(f3, "Anulada por error en la orden de compra");
 
-            long f4 = crear(juan, mono, pesos, pv2, LocalDate.of(2026, 4, 10), null,
+            long f4 = crear(null, cf, pesos, pv2, LocalDate.now(), "Venta de demostración; Consumidor Final",
                     item(lpNotebook, 1, 0));
-            emitir(f4);
 
             crear(null, cf, pesos, pv1, LocalDate.now(), "Presupuesto pendiente de confirmar",
                     item(lpResma, 3, 0));   // queda en BORRADOR
 
-            UsuarioActual.set(alberto);
-            crear(tech, ri, pesos, pv1, LocalDate.now(), "Cargada por acortez",
+            UsuarioActual.set(operadorDemo);
+            crear(null, cf, pesos, pv1, LocalDate.now(), "Cargada por operador demo; Consumidor Final",
                     item(lpMouse, 4, 0));   // BORRADOR auditado por otro usuario
 
             log.info("Datos de ejemplo cargados: {} facturas.", 6);
@@ -171,11 +167,4 @@ public class DataLoader implements CommandLineRunner {
                 .listaPrecioArticuloId(lpa.getId()).cantidad(cantidad).porcentajeBonificacion(bonif).build();
     }
 
-    private void emitir(long id) {
-        facturaService.cambiarEstado(id, new CambioEstadoRequestDTO("EMITIDA", null));
-    }
-
-    private void anular(long id, String motivo) {
-        facturaService.cambiarEstado(id, new CambioEstadoRequestDTO("ANULADA", motivo));
-    }
 }

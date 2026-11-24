@@ -8,3 +8,6 @@ spring:
     hibernate:
       ddl-auto: create-drop
     show-sql: false
+
+arca:
+  condicion-iva-emisor: 1

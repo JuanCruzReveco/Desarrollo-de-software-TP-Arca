@@ -5,6 +5,7 @@
 import { ApiError, FacturaService } from './services/FacturaService.js';
 import type {
   EstadoFactura,
+  ConfiguracionFiscalDTO,
   FacturaDetalleRequestDTO,
   FacturaFiltrosDTO,
   FacturaReporteDTO,
@@ -29,6 +30,8 @@ const estado = {
   articulos: [] as OpcionDTO[],
   articulosPorLista: new Map<number, OpcionDTO[]>(),
   monedas: [] as OpcionDTO[],
+  condicionesIva: [] as OpcionDTO[],
+  configuracionFiscal: null as ConfiguracionFiscalDTO | null,
   guardando: false,
   accionesPendientes: new Set<number>(),
   busqueda: 0,
@@ -156,12 +159,13 @@ function pagina<T>(opciones: T[], numero: number): { elementos: T[]; totalPagina
 // ============================ Catálogos ============================
 
 async function cargarCatalogos(): Promise<void> {
-  const [pv, cli, iva, mon, listas] = await Promise.all([
+  const [pv, cli, iva, mon, listas, fiscal] = await Promise.all([
     api.obtenerPuntosVenta(),
     api.obtenerClientes(),
     api.obtenerCondicionesIva(),
     api.obtenerTiposMoneda(),
     api.obtenerListasPrecio(),
+    api.obtenerConfiguracionFiscal(),
   ]);
   const form = $<HTMLFormElement>('#form-factura');
   llenarSelect(form.elements.namedItem('puntoVentaId') as HTMLSelectElement, pv);
@@ -171,6 +175,9 @@ async function cargarCatalogos(): Promise<void> {
   estado.clientes = cli;
   estado.listasPrecio = listas;
   estado.monedas = mon;
+  estado.condicionesIva = iva;
+  estado.configuracionFiscal = fiscal;
+  seleccionarCliente(null);
   renderItems();
   $<HTMLInputElement>('[name="fechaEmision"]').value = fechaHoyVisible();
   if (listas.length > 0) {
@@ -178,6 +185,33 @@ async function cargarCatalogos(): Promise<void> {
   } else {
     $<HTMLButtonElement>('#btn-buscar-articulo').disabled = true;
   }
+}
+
+function mostrarTipoPrevisto(): void {
+  const destino = $<HTMLElement>('#tipo-comprobante-previsto');
+  const fiscal = estado.configuracionFiscal;
+  if (!fiscal?.emisorCondicionIva) {
+    destino.textContent = 'Configurá la condición IVA de la CUIT emisora para determinar A, B o C';
+    return;
+  }
+  let tipo: number;
+  if (fiscal.emisorCondicionIva === 1) {
+    const receptorId = Number($<HTMLSelectElement>('[name="condicionIvaId"]').value);
+    const receptor = estado.condicionesIva.find(c => c.id === receptorId)?.valor;
+    if (receptor == null) {
+      destino.textContent = 'Seleccioná una condición IVA receptora válida';
+      return;
+    }
+    tipo = receptor === 1 || receptor === 6 ? 1 : 6;
+  } else if (fiscal.emisorCondicionIva === 4 || fiscal.emisorCondicionIva === 6) {
+    tipo = 11;
+  } else {
+    destino.textContent = 'Condición IVA emisora no admitida';
+    return;
+  }
+  destino.textContent = fiscal.tiposPermitidos.includes(tipo)
+    ? `Factura ${tipo === 1 ? 'A' : tipo === 6 ? 'B' : 'C'} (sujeta a autorización de ARCA)`
+    : 'Combinación fiscal no admitida';
 }
 
 async function cargarArticulosPorLista(listaPrecioId: number): Promise<void> {
@@ -198,6 +232,15 @@ async function cargarArticulosPorLista(listaPrecioId: number): Promise<void> {
 function seleccionarCliente(cliente: OpcionDTO | null): void {
   $<HTMLInputElement>('[name="clienteId"]').value = cliente ? String(cliente.id) : '';
   $<HTMLOutputElement>('#cliente-elegido').textContent = cliente?.etiqueta ?? 'Consumidor Final';
+  if (!cliente) {
+    const condicionFinal = estado.condicionesIva.find(c => c.valor === 5);
+    if (condicionFinal) $<HTMLSelectElement>('[name="condicionIvaId"]').value = String(condicionFinal.id);
+  }
+  mostrarTipoPrevisto();
+}
+
+function clienteDemoNoEmitible(cliente: OpcionDTO): boolean {
+  return /sin validar|00-00000000-0/i.test(cliente.etiqueta);
 }
 
 function seleccionarArticulo(articulo: OpcionDTO | null): void {
@@ -217,7 +260,10 @@ function renderClientes(): void {
     const fila = document.createElement('tr');
     agregarCelda(fila, cliente.etiqueta);
     const boton = document.createElement('button');
-    boton.type = 'button'; boton.className = 'btn btn--sm'; boton.textContent = 'Seleccionar';
+    boton.type = 'button'; boton.className = 'btn btn--sm';
+    boton.textContent = clienteDemoNoEmitible(cliente) ? 'Solo demo' : 'Seleccionar';
+    boton.disabled = clienteDemoNoEmitible(cliente);
+    if (boton.disabled) boton.title = 'Este cliente de ejemplo no tiene un CUIT real. Usá Consumidor Final o cargá datos autorizados.';
     boton.dataset.seleccionarCliente = String(cliente.id);
     agregarCelda(fila, '').append(boton);
     tbody.append(fila);
@@ -454,6 +500,7 @@ async function editarFactura(f: FacturaReporteDTO): Promise<void> {
     (form.elements.namedItem('puntoVentaId') as HTMLSelectElement).value = String(det.puntoVentaId);
     seleccionarCliente(det.clienteId ? estado.clientes.find(c => c.id === det.clienteId) ?? { id: det.clienteId, etiqueta: det.clienteDenominacion, valor: null } : null);
     (form.elements.namedItem('condicionIvaId') as HTMLSelectElement).value = String(det.condicionIvaId);
+    mostrarTipoPrevisto();
     (form.elements.namedItem('tipoMonedaId') as HTMLSelectElement).value = String(det.tipoMonedaId);
     (form.elements.namedItem('fechaEmision') as HTMLInputElement).value = formatoFecha(det.fechaEmision);
     (form.elements.namedItem('observaciones') as HTMLInputElement).value = det.observaciones ?? '';
@@ -516,7 +563,12 @@ function renderFacturas(): void {
       boton.className = `btn btn--sm ${clase}`;
       boton.dataset.accion = accion;
       boton.dataset.id = String(f.id);
-      boton.disabled = !habilitada || estado.guardando || estado.accionesPendientes.has(f.id);
+      boton.disabled = !habilitada || estado.guardando || estado.accionesPendientes.has(f.id)
+        || (accion === 'anular' && f.autorizacionArca);
+      if (accion === 'anular' && f.autorizacionArca) {
+        boton.title = 'Una factura autorizada por ARCA requiere una nota de crédito para su anulación fiscal.';
+        boton.setAttribute('aria-label', boton.title);
+      }
       boton.textContent = etiqueta;
       acciones.append(boton);
     }
@@ -573,7 +625,12 @@ async function accionFila(accion: string, id: number): Promise<void> {
         return;
       case 'emitir': {
         const r = await api.actualizarEstado(id, 'EMITIDA');
-        mostrarMensaje(`Factura emitida con número ${r.numeroFactura}`, 'ok');
+        const detalle = await api.obtenerFactura(id);
+        if (r.estado === 'EMITIDA' && detalle.autorizacionArca && detalle.cae && detalle.caeFechaVencimiento) {
+          mostrarMensaje(`ARCA homologación autorizó la factura N° ${r.numeroFactura}. CAE ${detalle.cae}, vencimiento ${formatoFecha(detalle.caeFechaVencimiento)}.`, 'ok');
+        } else {
+          mostrarMensaje('No se pudo confirmar el CAE de ARCA. Revisá el estado de la factura antes de volver a emitir.', 'error');
+        }
         break;
       }
       case 'anular': {
@@ -596,6 +653,7 @@ async function accionFila(accion: string, id: number): Promise<void> {
     await buscar();
   } catch (err) {
     manejarError(err);
+    if (accion === 'emitir') await buscar();
   } finally {
     if (mutacion) {
       estado.accionesPendientes.delete(id);
@@ -607,6 +665,7 @@ async function accionFila(accion: string, id: number): Promise<void> {
 // ============================ Wiring de eventos ============================
 
 function conectarEventos(): void {
+  $<HTMLSelectElement>('[name="condicionIvaId"]').addEventListener('change', mostrarTipoPrevisto);
   document.querySelectorAll<HTMLInputElement>('[name="fechaDesde"], [name="fechaHasta"], [name="fechaEmision"]').forEach(campo => {
     campo.addEventListener('input', ev => aplicarMascaraFecha(campo, (ev as InputEvent).inputType?.startsWith('delete') ?? false));
   });
@@ -644,7 +703,7 @@ function conectarEventos(): void {
   $<HTMLTableSectionElement>('#resultados-clientes').addEventListener('click', ev => {
     const boton = (ev.target as HTMLElement).closest<HTMLButtonElement>('[data-seleccionar-cliente]');
     const cliente = estado.clientes.find(c => c.id === Number(boton?.dataset.seleccionarCliente));
-    if (!boton || !cliente || estado.guardando) return;
+    if (!boton || !cliente || estado.guardando || clienteDemoNoEmitible(cliente)) return;
     seleccionarCliente(cliente);
     cerrarDialogo($<HTMLDialogElement>('#dialogo-clientes'), $<HTMLButtonElement>('#btn-buscar-cliente'));
   });

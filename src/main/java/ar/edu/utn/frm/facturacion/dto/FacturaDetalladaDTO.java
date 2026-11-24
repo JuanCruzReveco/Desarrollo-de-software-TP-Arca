@@ -18,6 +18,7 @@ import java.util.List;
 public class FacturaDetalladaDTO {
     private Long id;
     private Long numero;
+    private Integer tipoComprobanteArca;
     private LocalDate fechaEmision;
     private String estado;
     private Long clienteId;
@@ -25,6 +26,7 @@ public class FacturaDetalladaDTO {
     private String clienteCuitCuil;
     private String clienteDomicilio;
     private Long condicionIvaId;
+    private Integer condicionIvaCodigoAfip;
     private String condicionIva;
     private Long puntoVentaId;
     private Integer puntoVentaNumero;
@@ -36,6 +38,8 @@ public class FacturaDetalladaDTO {
     private double importeCobrado;
     private double importeSaldo;
     private String cae;
+    /** Verdadero solo para un CAE aprobado por WSFEv1 en homologación. */
+    private boolean autorizacionArca;
     private LocalDate caeFechaVencimiento;
     private LocalDate fechaAnulacion;
     private String observaciones;

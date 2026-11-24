@@ -53,7 +53,7 @@ class FacturaServiceTest {
         assertThat(creada.getNumeroFactura()).isNull();           // el número se asigna al emitir
         assertThat(creada.getCantidadItems()).isEqualTo(2);
         assertThat(creada.getImporteTotal()).isEqualTo(2509.5);
-        assertThat(creada.getClienteDenominacion()).isEqualTo("Empresa Tech S.A.");
+        assertThat(creada.getClienteDenominacion()).isEqualTo("Cliente de prueba");
 
         FacturaDetalladaDTO detalle = service.obtener(creada.getId());
         assertThat(detalle.getDetalles()).hasSize(2);
@@ -97,9 +97,9 @@ class FacturaServiceTest {
                 .isInstanceOf(ReglaNegocioException.class);     // BORRADOR -> ANULADA no es válido
 
         service.cambiarEstado(id, new CambioEstadoRequestDTO("EMITIDA", null));
-        FacturaReporteDTO anulada = service.cambiarEstado(id, new CambioEstadoRequestDTO("ANULADA", "error de carga"));
-        assertThat(anulada.getEstado()).isEqualTo("ANULADA");
-        assertThat(service.obtener(id).getFechaAnulacion()).isNotNull();
+        assertThatThrownBy(() -> service.cambiarEstado(id, new CambioEstadoRequestDTO("ANULADA", "error de carga")))
+                .isInstanceOf(ReglaNegocioException.class).hasMessageContaining("nota de crédito");
+        assertThat(service.obtener(id).getEstado()).isEqualTo("EMITIDA");
 
         assertThatThrownBy(() -> service.eliminar(id)).isInstanceOf(ReglaNegocioException.class);
     }

@@ -30,6 +30,7 @@ public class FacturaReporteDTO {
     private long cantidadItems;
     private String estado;
     private String codigoMoneda;
+    private boolean autorizacionArca;
 
     public FacturaReporteDTO(Long id, Long numeroFactura, LocalDate fechaEmision, String clienteDenominacion,
                              String condicionIva, String puntoVentaDescripcion, double importeTotal,
@@ -51,6 +52,14 @@ public class FacturaReporteDTO {
         this(id, numeroFactura, fechaEmision, clienteDenominacion, condicionIva, puntoVentaDescripcion,
                 importeTotal, cantidadItems, estado);
         this.codigoMoneda = codigoMoneda;
+    }
+
+    public FacturaReporteDTO(Long id, Long numeroFactura, LocalDate fechaEmision, String clienteDenominacion,
+                             String condicionIva, String puntoVentaDescripcion, Double importeTotal,
+                             Long cantidadItems, EstadoFactura estado, String codigoMoneda, String resultadoAfip) {
+        this(id, numeroFactura, fechaEmision, clienteDenominacion, condicionIva, puntoVentaDescripcion,
+                importeTotal, cantidadItems, estado, codigoMoneda);
+        this.autorizacionArca = "ARCA_HOMOLOGACION_APROBADA".equals(resultadoAfip);
     }
 
     /** Constructor usado por la expresión "SELECT new" de JPQL (recibe el enum directamente). */

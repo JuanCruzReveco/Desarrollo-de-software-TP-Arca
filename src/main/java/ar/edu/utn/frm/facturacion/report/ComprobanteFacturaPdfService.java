@@ -25,7 +25,7 @@ import java.io.IOException;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 
-/** Comprobante imprimible de una factura con CAE simulado. */
+/** Comprobante imprimible de una factura autorizada por ARCA en homologación. */
 @Service
 public class ComprobanteFacturaPdfService {
 
@@ -36,6 +36,9 @@ public class ComprobanteFacturaPdfService {
                 || factura.getCae() == null || factura.getCae().isBlank()
                 || factura.getCaeFechaVencimiento() == null || factura.getNumero() == null) {
             throw new ReglaNegocioException("La factura debe estar emitida y tener CAE para imprimir el comprobante");
+        }
+        if (!factura.isAutorizacionArca()) {
+            throw new ReglaNegocioException("La factura no tiene autorización de ARCA en homologación");
         }
         try {
             BaseFont fuente = ReporteFacturasService.fuentePdf();
@@ -60,7 +63,14 @@ public class ComprobanteFacturaPdfService {
         Font dato = new Font(fuente, 8);
 
         documento.add(new Paragraph("Fecha de emisión: " + factura.getFechaEmision().format(FECHA), normal));
-        documento.add(new Paragraph("FACTURA DE VENTA", titulo));
+        String clase = switch (factura.getTipoComprobanteArca() == null ? 0 : factura.getTipoComprobanteArca()) {
+            case 1 -> " A";
+            case 6 -> " B";
+            case 11 -> " C";
+            default -> "";
+        };
+        boolean claseC = factura.getTipoComprobanteArca() != null && factura.getTipoComprobanteArca() == 11;
+        documento.add(new Paragraph("FACTURA" + clase + " DE VENTA", titulo));
         if ("ANULADA".equals(factura.getEstado())) {
             documento.add(new Paragraph("ANULADA", new Font(fuente, 13, Font.BOLD, Color.RED)));
         }
@@ -70,17 +80,25 @@ public class ComprobanteFacturaPdfService {
         documento.add(new Paragraph("Cliente: " + texto(factura.getClienteDenominacion()), normal));
         documento.add(new Paragraph("CUIT/CUIL: " + texto(factura.getClienteCuitCuil())
                 + "    Condición IVA: " + texto(factura.getCondicionIva()), normal));
+        if (factura.getTipoComprobanteArca() != null && factura.getTipoComprobanteArca() == 1
+                && factura.getCondicionIvaCodigoAfip() != null && factura.getCondicionIvaCodigoAfip() == 6) {
+            documento.add(new Paragraph("El crédito fiscal discriminado en el presente comprobante, solo podrá ser computado a efectos del Régimen de Sostenimiento e Inclusión Fiscal para Pequeños Contribuyentes de la Ley Nº 27.618", normal));
+        }
         documento.add(new Paragraph("Domicilio: " + texto(factura.getClienteDomicilio()), normal));
         documento.add(new Paragraph("Moneda: " + texto(factura.getCodigoMoneda()) + " - "
                 + texto(factura.getTipoMoneda()), normal));
-        documento.add(new Paragraph("CAE simulado: " + factura.getCae(), normal));
+        documento.add(new Paragraph("CAE (homologación): " + factura.getCae(), normal));
         documento.add(new Paragraph("Vencimiento CAE: " + factura.getCaeFechaVencimiento().format(FECHA), normal));
         documento.add(new Paragraph(" "));
 
-        PdfPTable tabla = new PdfPTable(new float[]{1.05f, 3.3f, .8f, 1.15f, .85f, 1f, 1.2f});
+        PdfPTable tabla = new PdfPTable(claseC
+                ? new float[]{1.05f, 3.3f, .8f, 1.15f, .85f, 1.2f}
+                : new float[]{1.05f, 3.3f, .8f, 1.15f, .85f, 1f, 1.2f});
         tabla.setWidthPercentage(100);
         tabla.setHeaderRows(1);
-        for (String encabezado : new String[]{"Código", "Descripción", "Cant.", "P. unit.", "Bonif. %", "IVA", "Subtotal"}) {
+        for (String encabezado : claseC
+                ? new String[]{"Código", "Descripción", "Cant.", "P. unit.", "Bonif. %", "Subtotal"}
+                : new String[]{"Código", "Descripción", "Cant.", "P. unit.", "Bonif. %", "IVA", "Subtotal"}) {
             PdfPCell celda = new PdfPCell(new Phrase(encabezado, cabecera));
             celda.setBackgroundColor(new Color(40, 70, 110));
             celda.setPadding(4);
@@ -92,7 +110,7 @@ public class ComprobanteFacturaPdfService {
             tabla.addCell(celda(numero(detalle.getCantidad()), dato, Element.ALIGN_RIGHT));
             tabla.addCell(celda(numero(detalle.getPrecioUnitario()), dato, Element.ALIGN_RIGHT));
             tabla.addCell(celda(numero(detalle.getPorcentajeBonificacion()), dato, Element.ALIGN_RIGHT));
-            tabla.addCell(celda(numero(detalle.getImporteIva()), dato, Element.ALIGN_RIGHT));
+            if (!claseC) tabla.addCell(celda(numero(detalle.getImporteIva()), dato, Element.ALIGN_RIGHT));
             tabla.addCell(celda(numero(detalle.getImporteSubtotal()), dato, Element.ALIGN_RIGHT));
         }
         documento.add(tabla);
@@ -119,7 +137,7 @@ public class ComprobanteFacturaPdfService {
                 ColumnText.showTextAligned(stamper.getOverContent(pagina), Element.ALIGN_CENTER,
                         new Phrase("Página " + pagina + " de " + reader.getNumberOfPages(), pie), centro, 38, 0);
                 ColumnText.showTextAligned(stamper.getOverContent(pagina), Element.ALIGN_CENTER,
-                        new Phrase("Comprobante académico. CAE simulado; sin validez fiscal.", pie), centro, 24, 0);
+                        new Phrase("Comprobante de prueba en homologación de ARCA. Sin validez fiscal.", pie), centro, 24, 0);
             }
             stamper.close();
             return out.toByteArray();

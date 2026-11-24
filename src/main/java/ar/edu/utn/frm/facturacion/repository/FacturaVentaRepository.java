@@ -10,6 +10,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.Optional;
+import java.util.List;
 
 public interface FacturaVentaRepository extends JpaRepository<FacturaVenta, Long>, FacturaReporteRepository {
 
@@ -26,4 +27,27 @@ public interface FacturaVentaRepository extends JpaRepository<FacturaVenta, Long
     /** Próximo número correlativo del punto de venta. */
     @Query("SELECT COALESCE(MAX(f.numero), 0) + 1 FROM FacturaVenta f WHERE f.puntoVenta = :puntoVenta")
     Long proximoNumero(@Param("puntoVenta") PuntoVenta puntoVenta);
+
+    @Query("SELECT f FROM FacturaVenta f WHERE f.puntoVenta = :puntoVenta AND f.tipoComprobanteArca = :tipo AND f.resultadoAfip IN :estados")
+    List<FacturaVenta> pendientesArca(@Param("puntoVenta") PuntoVenta puntoVenta,
+                                      @Param("tipo") int tipo,
+                                      @Param("estados") List<String> estados);
+
+    @Query("SELECT COALESCE(MAX(f.numero), 0) FROM FacturaVenta f WHERE f.puntoVenta = :puntoVenta "
+            + "AND f.tipoComprobanteArca = :tipo AND f.resultadoAfip IN :estados")
+    Long ultimoNumeroArcaLocal(@Param("puntoVenta") PuntoVenta puntoVenta,
+                               @Param("tipo") int tipo,
+                               @Param("estados") List<String> estados);
+
+    boolean existsByPuntoVentaAndTipoComprobanteArcaAndNumero(PuntoVenta puntoVenta, Integer tipo, Long numero);
+
+    @Query("SELECT COALESCE(MAX(f.numero), 0) FROM FacturaVenta f WHERE f.puntoVenta.numero = :pv "
+            + "AND f.tipoComprobanteArca = :tipo AND f.resultadoAfip = :resultado")
+    Long ultimoConfirmadoArca(@Param("pv") int pv, @Param("tipo") int tipo,
+                              @Param("resultado") String resultado);
+
+    @Query("SELECT COUNT(f) FROM FacturaVenta f WHERE f.puntoVenta = :pv "
+            + "AND f.resultadoAfip = :resultado AND (f.tipoComprobanteArca IS NULL OR f.tipoComprobanteArca <> :tipo)")
+    long contarHistorialOtroTipo(@Param("pv") PuntoVenta pv, @Param("resultado") String resultado,
+                                 @Param("tipo") int tipo);
 }

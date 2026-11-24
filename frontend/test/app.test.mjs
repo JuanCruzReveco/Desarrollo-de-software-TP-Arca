@@ -28,6 +28,8 @@ async function open(t, { invoices = [], article = 'Artículo', catalogs = {}, po
       const parsed = new URL(url);
       const path = parsed.pathname.split('/').at(-1);
       if (path === 'clientes') body = catalogs.clients ?? [{ id: 1, etiqueta: 'Opción', valor: null }];
+      else if (path === 'configuracion-fiscal') body = catalogs.fiscal ?? { emisorCondicionIva: 1, tiposPermitidos: [1, 6] };
+      else if (path === 'condiciones-iva') body = catalogs.iva ?? [{ id: 1, etiqueta: 'IVA Responsable Inscripto', valor: null }];
       else if (path === 'listas-precio') body = catalogs.lists ?? [{ id: 10, etiqueta: 'Lista general', valor: null }];
       else if (path === 'lista-precio-articulos') body = parsed.searchParams.has('listaPrecioId')
         ? catalogs.articlesByList?.[parsed.searchParams.get('listaPrecioId')] ?? [{ id: 1, etiqueta: article, valor: 100 }]
@@ -73,6 +75,25 @@ const search = (ui, state) => {
   ui.document.querySelector('#form-filtros').dispatchEvent(new ui.document.defaultView.Event('submit', { cancelable: true }));
 };
 const detail = id => ({ ...createdInvoice, id, puntoVentaId: 1, clienteId: null, condicionIvaId: 1, tipoMonedaId: 1, detalles: [{ listaPrecioArticuloId: 1, cantidad: 1, precioUnitario: 100, descripcion: `Detalle ${id}` }] });
+
+test('defaults to B for consumer final and switches to A for an identified RI receiver', async t => {
+  const ui = await open(t, { catalogs: { iva: [
+    { id: 1, etiqueta: 'IVA Responsable Inscripto', valor: 1 },
+    { id: 2, etiqueta: 'Consumidor Final', valor: 5 },
+  ] } });
+  assert.equal(ui.document.querySelector('[name="condicionIvaId"]').value, '2');
+  assert.match(ui.document.querySelector('#tipo-comprobante-previsto').textContent, /Factura B/);
+  ui.document.querySelector('[name="condicionIvaId"]').value = '1';
+  ui.document.querySelector('[name="condicionIvaId"]').dispatchEvent(new ui.document.defaultView.Event('change'));
+  assert.match(ui.document.querySelector('#tipo-comprobante-previsto').textContent, /Factura A/);
+});
+
+test('shows C for monotributo issuer and does not invent type without issuer config', async t => {
+  const mono = await open(t, { catalogs: { fiscal: { emisorCondicionIva: 6, tiposPermitidos: [11] } } });
+  assert.match(mono.document.querySelector('#tipo-comprobante-previsto').textContent, /Factura C/);
+  const missing = await open(t, { catalogs: { fiscal: { emisorCondicionIva: 0, tiposPermitidos: [] } } });
+  assert.match(missing.document.querySelector('#tipo-comprobante-previsto').textContent, /configur/i);
+});
 
 test('latest search wins when responses arrive in reverse order', async t => {
   const older = deferred(), newer = deferred();
@@ -234,6 +255,16 @@ test('annulment dialog sends a typed reason without using browser prompt', async
   assert.deepEqual(JSON.parse(patch.body), { estado: 'ANULADA', observaciones: 'Error de carga' });
 });
 
+test('ARCA-authorized invoice cannot be locally annulled from the list', async t => {
+  const ui = await open(t, { invoices: [{ ...invoice, autorizacionArca: true }] });
+  const annul = ui.document.querySelector('[data-accion="anular"]');
+  assert.equal(annul.disabled, true);
+  assert.match(annul.title, /nota de cr[eé]dito/i);
+  annul.click();
+  assert.equal(ui.requests.filter(r => r.method === 'PATCH').length, 0);
+  assert.equal(ui.document.querySelector('[data-accion="imprimir"]').disabled, false);
+});
+
 test('repeated submit while saving produces only one invoice request', async t => {
   let release;
   const pending = new Promise(resolve => { release = resolve; });
@@ -346,6 +377,46 @@ test('double clicking Emitir sends only one PATCH while the first is pending', a
   assert.equal(ui.requests.filter(r => r.method === 'PATCH').length, 1);
   pending.resolve(response(invoice));
   await tick();
+});
+
+test('approved emission shows the CAE returned by ARCA and its expiry', async t => {
+  let listCalls = 0;
+  const approved = { ...invoice, numeroFactura: 42 };
+  const authorizedDetail = { ...detail(1), ...approved, numero: 42, autorizacionArca: true,
+    cae: '12345678901234', caeFechaVencimiento: '2026-11-30' };
+  const ui = await open(t, { patch: () => response(approved), get: url =>
+    /facturas\/1$/.test(url) ? response(authorizedDetail) :
+      response(listCalls++ === 0 ? [createdInvoice] : [approved]) });
+  ui.click('[data-accion="emitir"]');
+  await tick(); await tick();
+  assert.match(ui.document.querySelector('#mensaje').textContent, /CAE 12345678901234/);
+  assert.match(ui.document.querySelector('#mensaje').textContent, /30\/11\/2026/);
+  assert.match(ui.document.querySelector('#mensaje').textContent, /homologaci[oó]n/i);
+});
+
+test('emission without verified ARCA provenance does not claim a real CAE', async t => {
+  let listCalls = 0;
+  const ui = await open(t, { patch: () => response(invoice), get: url =>
+    /facturas\/1$/.test(url) ? response({ ...detail(1), ...invoice, cae: '12345678901234',
+      caeFechaVencimiento: '2026-11-30', autorizacionArca: false }) :
+      response(listCalls++ === 0 ? [createdInvoice] : [invoice]) });
+  ui.click('[data-accion="emitir"]');
+  await tick(); await tick();
+  assert.match(ui.document.querySelector('#mensaje').textContent, /No se pudo confirmar el CAE/);
+  assert.doesNotMatch(ui.document.querySelector('#mensaje').textContent, /ARCA homologación autorizó/);
+});
+
+test('failed emission keeps the error visible and refreshes invoice state', async t => {
+  let listCalls = 0;
+  const ui = await open(t, { patch: () => ({ ok: false, status: 409,
+    json: async () => ({ title: 'ARCA rechazó el comprobante', detail: 'Documento inválido' }) }),
+    get: () => response(listCalls++ === 0 ? [createdInvoice] : [createdInvoice]) });
+  ui.document.defaultView.console.error = () => {};
+  ui.click('[data-accion="emitir"]');
+  await tick(); await tick();
+  assert.match(ui.document.querySelector('#mensaje').textContent, /Documento inválido/);
+  assert.equal(ui.requests.filter(r => /\/facturas(?:\?|$)/.test(r.url) && !r.method).length, 2);
+  assert.match(ui.document.querySelector('#tabla-facturas tbody').textContent, /BORRADOR/);
 });
 
 test('double clicking Anular sends only one PATCH while the first is pending', async t => {

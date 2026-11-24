@@ -63,7 +63,7 @@ class FacturaRestControllerTest {
 
         mvc.perform(get(location)).andExpect(status().isOk())
                 .andExpect(jsonPath("$.detalles", hasSize(1)))
-                .andExpect(jsonPath("$.clienteDenominacion").value("Empresa Tech S.A."));
+                .andExpect(jsonPath("$.clienteDenominacion").value("Cliente de prueba"));
 
         mvc.perform(get("/api/facturas").param("estado", "BORRADOR"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$", hasSize(1)))
@@ -79,7 +79,7 @@ class FacturaRestControllerTest {
 
         mvc.perform(patch(location + "/estado").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"estado\":\"ANULADA\",\"observaciones\":\"error\"}"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.estado").value("ANULADA"));
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.detail", containsString("nota de crédito")));
     }
 
     @Test
@@ -138,7 +138,7 @@ class FacturaRestControllerTest {
                 .andReturn().getResponse().getContentAsByteArray();
         try (PdfReader reader = new PdfReader(pdf)) {
             String texto = new PdfTextExtractor(reader).getTextFromPage(1);
-            assertThat(texto).contains(emitida.get("cae").asText(), "Empresa Tech S.A.", "30-71234567-8",
+            assertThat(texto).contains(emitida.get("cae").asText(), "Cliente de prueba", "30-00000000-7",
                     "Calle 1", "00001-00000001");
             assertThat(texto).contains("Fecha de emisión", "Vencimiento CAE", "Página 1 de 1",
                     LocalDate.parse(emitida.get("caeFechaVencimiento").asText())
@@ -147,12 +147,8 @@ class FacturaRestControllerTest {
 
         mvc.perform(patch(location + "/estado").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"estado\":\"ANULADA\"}"))
-                .andExpect(status().isOk());
-        byte[] anulada = mvc.perform(get(location + "/pdf")).andExpect(status().isOk())
-                .andReturn().getResponse().getContentAsByteArray();
-        try (PdfReader reader = new PdfReader(anulada)) {
-            assertThat(new PdfTextExtractor(reader).getTextFromPage(1)).contains("ANULADA", emitida.get("cae").asText());
-        }
+                .andExpect(status().isConflict());
+        mvc.perform(get(location + "/pdf")).andExpect(status().isOk());
     }
 
     @Test

@@ -217,20 +217,35 @@ class PersistenciaModeloTest {
     }
 
     @Test
-    void noSePuedeRepetirNumeroDeFacturaEnElMismoPuntoDeVenta() {
+    void noSePuedeRepetirNumeroEnMismaSerieFiscal() {
         FacturaVenta primera = nuevaFactura(null);
         primera.setNumero(1L);
+        primera.setTipoComprobanteArca(1);
         facturas.saveAndFlush(primera);
 
         FacturaVenta segunda = nuevaFactura(null);
         segunda.setNumero(1L);
+        segunda.setTipoComprobanteArca(1);
         assertThatThrownBy(() -> facturas.saveAndFlush(segunda))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @Test
+    void tiposDistintosTienenSeriesNumericasIndependientes() {
+        FacturaVenta primera = nuevaFactura(null);
+        primera.setNumero(1L);
+        primera.setTipoComprobanteArca(1);
+        facturas.saveAndFlush(primera);
+        FacturaVenta segunda = nuevaFactura(null);
+        segunda.setNumero(1L);
+        segunda.setTipoComprobanteArca(6);
+        facturas.saveAndFlush(segunda);
+        assertThat(facturas.count()).isEqualTo(2);
+    }
+
+    @Test
     void variosBorradoresConNumeroNuloConviven() {
-        // La restricción (punto de venta, número) no impide varios borradores: el número nulo no compite.
+        // La restricción fiscal no impide varios borradores: el número nulo no compite.
         facturas.saveAndFlush(nuevaFactura(null));
         facturas.saveAndFlush(nuevaFactura(null));
         assertThat(facturas.count()).isEqualTo(2);
